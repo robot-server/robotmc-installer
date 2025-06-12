@@ -2,6 +2,8 @@ package com.sysbot32.robotmc.installer.config
 
 import com.sysbot32.robotmc.installer.mod.loader.ModLoaderType
 import org.springframework.boot.context.properties.ConfigurationProperties
+import java.nio.file.Path
+import java.nio.file.Paths
 
 @ConfigurationProperties(prefix = "installer")
 data class InstallerProperties(
@@ -10,6 +12,17 @@ data class InstallerProperties(
 ) {
     data class Minecraft(
         val version: String,
+        val directory: Path = System.getProperty("os.name").lowercase().run {
+            return@run when {
+                // Windows
+                contains("win") -> Paths.get(System.getenv("APPDATA")).resolve(".minecraft")
+                // macOS
+                contains("mac") -> Paths.get(System.getProperty("user.home", "."))
+                    .resolve("Library").resolve("Application Support").resolve("minecraft")
+                // Linux
+                else -> Paths.get(System.getProperty("user.home", ".")).resolve(".minecraft")
+            }
+        },
     )
 
     data class Mod(
