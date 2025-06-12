@@ -14,11 +14,16 @@ data class InstallerProperties(
 
     data class Mod(
         val loader: Loader,
+        val mods: List<Mod> = listOf(),
     ) {
         data class Loader(
             val type: ModLoaderType,
             val version: String?,
             val installOptions: List<String> = listOf(),
+        )
+
+        data class Mod(
+            val downloadUrl: String,
         )
     }
 }

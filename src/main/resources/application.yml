@@ -11,3 +11,5 @@ installer:
       version: 21.1.176
       install-options:
         - '--install-client'
+    mods:
+      - download-url: 'https://cdn.modrinth.com/data/LNytGWDc/versions/tS7ygzAE/create-1.21.1-6.0.6.jar'
