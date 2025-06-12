@@ -18,6 +18,7 @@ data class InstallerProperties(
         data class Loader(
             val type: ModLoaderType,
             val version: String?,
+            val installOptions: List<String> = listOf(),
         )
     }
 }

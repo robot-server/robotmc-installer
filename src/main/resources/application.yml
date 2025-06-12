@@ -9,3 +9,5 @@ installer:
     loader:
       type: neo_forge
       version: 21.1.176
+      install-options:
+        - '--install-client'
