@@ -16,6 +16,7 @@ installer:
       - download-url: 'https://cdn.modrinth.com/data/HXF82T3G/versions/3RGurDCA/BiomesOPlenty-neoforge-1.21.1-21.1.0.12.jar'
       - download-url: 'https://cdn.modrinth.com/data/ziOp6EO8/versions/hIBHksrz/Corgilib-NeoForge-1.21.1-5.0.0.4.jar'
       - download-url: 'https://cdn.modrinth.com/data/LNytGWDc/versions/tS7ygzAE/create-1.21.1-6.0.6.jar'
+      - download-url: 'https://cdn.modrinth.com/data/73MCa9Po/versions/dnoUh0Rf/everythingcopper-1.21.1-2.4.2.jar'
       - download-url: 'https://cdn.modrinth.com/data/R2OftAxM/versions/yCkges3O/FarmersDelight-1.21.1-1.2.8.jar'
       - download-url: 'https://cdn.modrinth.com/data/8BmcQJ2H/versions/QEqpUJ1G/geckolib-neoforge-1.21.1-4.7.5.1.jar'
       - download-url: 'https://cdn.modrinth.com/data/s3dmwKy5/versions/8wmCpbQ2/GlitchCore-neoforge-1.21.1-2.1.0.0.jar'
