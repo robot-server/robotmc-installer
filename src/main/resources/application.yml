@@ -29,6 +29,7 @@ installer:
       - download-url: 'https://cdn.modrinth.com/data/NTi7d3Xc/versions/e9ztcYRU/Oh-The-Biomes-Weve-Gone-NeoForge-2.4.2.jar'
       - download-url: 'https://cdn.modrinth.com/data/g8NOG5OR/versions/GaPyECtl/Oh-The-Trees-Youll-Grow-neoforge-1.21.1-5.0.14.jar'
       - download-url: 'https://cdn.modrinth.com/data/J9pKOkxP/versions/ePMzHdq2/potentials-neoforge-1.21-0.6.2.jar'
+      - download-url: 'https://cdn.modrinth.com/data/G1hIVOrD/versions/x99nCLTm/resourcefullib-neoforge-1.21-3.0.12.jar'
       - download-url: 'https://cdn.modrinth.com/data/e0bNACJD/versions/SPj5bJoM/SereneSeasons-neoforge-1.21.1-10.1.0.3.jar'
       - download-url: 'https://cdn.modrinth.com/data/2zaNpyqY/versions/7wQw3fIB/sky_aesthetics-neoforge-1.7.0.jar'
       - download-url: 'https://cdn.modrinth.com/data/ItTQpuBn/versions/JzzgqV4J/stellaris-1.21-neoforge-1.3.17.jar'
