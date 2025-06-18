@@ -1,6 +1,7 @@
 package com.sysbot32.robotmc.installer.mod.loader
 
 import com.sysbot32.robotmc.installer.config.InstallerProperties
+import com.sysbot32.robotmc.installer.gui.InProgressDialog
 import io.github.oshai.kotlinlogging.KotlinLogging
 import org.apache.commons.exec.CommandLine
 import org.apache.commons.exec.DefaultExecutor
@@ -15,6 +16,7 @@ private val log = KotlinLogging.logger { }
 class ModLoaderInstallService(
     private val restClient: RestClient,
     private val installerProperties: InstallerProperties,
+    private val inProgressDialog: InProgressDialog,
 ) {
     fun install() {
         log.info { "Minecraft ${installerProperties.minecraft.version}" }
@@ -32,11 +34,13 @@ class ModLoaderInstallService(
                 .toEntity(ByteArray::class.java)
                 .body?.let { Files.write(installerPath, it) }
         }
+        inProgressDialog.progressBar.value++
         DefaultExecutor.builder().get().run {
             execute(
                 CommandLine.parse(
                     "java -jar $installerPath ${installerProperties.mod.loader.installOptions.joinToString(" ")}"
                 ).also { log.info { "$it" } })
         }
+        inProgressDialog.progressBar.value++
     }
 }

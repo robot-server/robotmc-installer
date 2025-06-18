@@ -1,6 +1,7 @@
 package com.sysbot32.robotmc.installer.mod
 
 import com.sysbot32.robotmc.installer.config.InstallerProperties
+import com.sysbot32.robotmc.installer.gui.InProgressDialog
 import io.github.oshai.kotlinlogging.KotlinLogging
 import org.springframework.stereotype.Service
 import org.springframework.web.client.RestClient
@@ -12,6 +13,7 @@ private val log = KotlinLogging.logger { }
 class ModInstallService(
     private val restClient: RestClient,
     private val installerProperties: InstallerProperties,
+    private val inProgressDialog: InProgressDialog,
 ) {
     fun install() {
         val modsDir = installerProperties.minecraft.directory.resolve("mods").also { log.info { it } }
@@ -24,6 +26,7 @@ class ModInstallService(
                     .toEntity(ByteArray::class.java)
                     .body?.let { Files.write(path, it) }
             }
+            inProgressDialog.progressBar.value++
         }
     }
 }
