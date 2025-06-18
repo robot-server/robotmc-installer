@@ -6,6 +6,7 @@ import io.github.oshai.kotlinlogging.KotlinLogging
 import org.springframework.boot.autoconfigure.SpringBootApplication
 import org.springframework.boot.runApplication
 import java.awt.GraphicsEnvironment
+import javax.swing.JOptionPane
 import kotlin.system.exitProcess
 
 private val log = KotlinLogging.logger { }
@@ -18,10 +19,20 @@ fun main(args: Array<String>) {
         System.setProperty("java.awt.headless", false.toString())
     }
     runApplication<RobotmcInstallerApplication>(*args).run {
+        if (JOptionPane.showConfirmDialog(
+                null,
+                "서버 접속에 필요한 모드 로더 및 모드를 설치할까요?",
+                "설치",
+                JOptionPane.YES_NO_OPTION
+            ) != JOptionPane.YES_OPTION
+        ) {
+            exitProcess(0)
+        }
         log.info { "========== Start ==========" }
         getBean(ModLoaderInstallService::class.java).install()
         getBean(ModInstallService::class.java).install()
         log.info { "========== End ==========" }
+        JOptionPane.showMessageDialog(null, "완료됐어요.")
         exitProcess(0)
     }
 }
