@@ -2,6 +2,7 @@ package com.sysbot32.robotmc.installer.mod.loader
 
 import com.sysbot32.robotmc.installer.config.InstallerProperties
 import com.sysbot32.robotmc.installer.gui.InProgressDialog
+import com.sysbot32.robotmc.installer.launcher.LauncherService
 import io.github.oshai.kotlinlogging.KotlinLogging
 import org.apache.commons.exec.CommandLine
 import org.apache.commons.exec.DefaultExecutor
@@ -14,6 +15,7 @@ private val log = KotlinLogging.logger { }
 
 @Service
 class ModLoaderInstallService(
+    private val launcherService: LauncherService,
     private val restClient: RestClient,
     private val installerProperties: InstallerProperties,
     private val inProgressDialog: InProgressDialog,
@@ -35,11 +37,18 @@ class ModLoaderInstallService(
                 .body?.let { Files.write(installerPath, it) }
         }
         inProgressDialog.progressBar.value++
-        DefaultExecutor.builder().get().run {
-            execute(
-                CommandLine.parse(
-                    "java -jar $installerPath ${installerProperties.mod.loader.installOptions.joinToString(" ")}"
-                ).also { log.info { "$it" } })
+
+        val lastVersionId = when (installerProperties.mod.loader.type) {
+            ModLoaderType.NEO_FORGE -> "${installerProperties.mod.loader.type.displayName.lowercase()}-${installerProperties.mod.loader.version}"
+            else -> throw IllegalArgumentException("Unsupported mod loader type ${installerProperties.mod.loader.type}")
+        }
+        if (this.launcherService.getProfiles().profiles.values.find { it.lastVersionId == lastVersionId } == null) {
+            DefaultExecutor.builder().get().run {
+                execute(
+                    CommandLine.parse(
+                        "java -jar $installerPath ${installerProperties.mod.loader.installOptions.joinToString(" ")}"
+                    ).also { log.info { "$it" } })
+            }
         }
         inProgressDialog.progressBar.value++
     }
