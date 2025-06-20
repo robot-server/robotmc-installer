@@ -45,4 +45,5 @@ kotlin {
 
 tasks.withType<Test> {
     useJUnitPlatform()
+    systemProperties["java.awt.headless"] = false
 }
