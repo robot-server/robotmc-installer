@@ -17,6 +17,7 @@ class ModInstallService(
 ) {
     fun install() {
         val modsDir = installerProperties.minecraft.directory.resolve("mods").also { log.info { it } }
+        modsDir.toFile().listFiles()?.forEach { log.info { it } }
         for (mod in installerProperties.mod?.mods ?: listOf()) {
             val path = modsDir.resolve(mod.downloadUrl.split("/").last())
             if (!Files.exists(path)) {
