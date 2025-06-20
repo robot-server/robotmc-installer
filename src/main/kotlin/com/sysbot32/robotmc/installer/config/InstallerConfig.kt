@@ -12,6 +12,10 @@ class InstallerConfig(
     private val installerProperties: InstallerProperties,
 ) {
     init {
+        log.info { "Environments: ${System.getenv()}" }
+        log.info { "Properties: ${System.getProperties()}" }
+        log.info { "Java Runtime Version: ${Runtime.version()}" }
+
         log.info { this.installerProperties }
     }
 }
