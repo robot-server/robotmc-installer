@@ -8,6 +8,7 @@ import org.springframework.web.client.RestClient
 import java.nio.file.Files
 import java.nio.file.Path
 import kotlin.io.path.createDirectory
+import kotlin.io.path.name
 
 private val log = KotlinLogging.logger { }
 
@@ -35,11 +36,17 @@ class ModInstallService(
 
         for (mod in installerProperties.mod?.mods ?: listOf()) {
             val path = modsDir.resolve(mod.downloadUrl.split("/").last())
-            this.restClient.get()
-                .uri(mod.downloadUrl)
-                .retrieve()
-                .toEntity(ByteArray::class.java)
-                .body?.let { Files.write(path, it) }
+            val backupFile = modsOld.resolve(path.name)
+            if (Files.exists(backupFile)) {
+                backupFile.toFile().copyTo(path.toFile())
+                log.info { "copied from mods_old $backupFile" }
+            } else {
+                this.restClient.get()
+                    .uri(mod.downloadUrl)
+                    .retrieve()
+                    .toEntity(ByteArray::class.java)
+                    .body?.let { Files.write(path, it) }
+            }
             inProgressDialog.progressBar.value++
         }
     }
