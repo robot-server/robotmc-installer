@@ -22,7 +22,7 @@ fun main(args: Array<String>) {
     runApplication<RobotmcInstallerApplication>(*args).run {
         if (JOptionPane.showConfirmDialog(
                 null,
-                "서버 접속에 필요한 모드 로더 및 모드를 설치할까요?",
+                "서버 접속에 필요한 모드 로더 및 모드를 설치할까요?\n기존 설치 모드는 mods_old로 옮겨집니다.",
                 "설치",
                 JOptionPane.YES_NO_OPTION
             ) != JOptionPane.YES_OPTION

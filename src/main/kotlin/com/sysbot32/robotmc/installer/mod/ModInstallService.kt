@@ -6,6 +6,8 @@ import io.github.oshai.kotlinlogging.KotlinLogging
 import org.springframework.stereotype.Service
 import org.springframework.web.client.RestClient
 import java.nio.file.Files
+import java.nio.file.Path
+import kotlin.io.path.createDirectory
 
 private val log = KotlinLogging.logger { }
 
@@ -17,16 +19,27 @@ class ModInstallService(
 ) {
     fun install() {
         val modsDir = installerProperties.minecraft.directory.resolve("mods").also { log.info { it } }
+        val modsOld = installerProperties.minecraft.directory.resolve("mods_old").also { log.info { it } }
+        if (!Files.exists(modsOld)) {
+            modsOld.createDirectory()
+        }
         modsDir.toFile().listFiles()?.forEach { log.info { it } }
+        modsDir.toFile().listFiles()?.forEach {
+            val newPath = modsOld.resolve(it.name)
+            if (!Files.exists(newPath)) {
+                it.renameTo(newPath.toFile())
+            } else {
+                it.deleteRecursively()
+            }
+        }
+
         for (mod in installerProperties.mod?.mods ?: listOf()) {
             val path = modsDir.resolve(mod.downloadUrl.split("/").last())
-            if (!Files.exists(path)) {
-                this.restClient.get()
-                    .uri(mod.downloadUrl)
-                    .retrieve()
-                    .toEntity(ByteArray::class.java)
-                    .body?.let { Files.write(path, it) }
-            }
+            this.restClient.get()
+                .uri(mod.downloadUrl)
+                .retrieve()
+                .toEntity(ByteArray::class.java)
+                .body?.let { Files.write(path, it) }
             inProgressDialog.progressBar.value++
         }
     }
