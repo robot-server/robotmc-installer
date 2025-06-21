@@ -1,6 +1,8 @@
 spring:
   application:
     name: robotmc-installer
+  main:
+    web-application-type: none
 
 installer:
   minecraft:
