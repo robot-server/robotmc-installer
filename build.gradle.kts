@@ -6,7 +6,12 @@ plugins {
 }
 
 group = "com.sysbot32"
-version = "0.0.9"
+/**
+ * 새로운 시작 - 메이저
+ * 기존 사용자 업데이트 필요 - 마이너
+ * 기존 사용자 업데이트 필요 없음 - 패치
+ */
+version = "0.0.10"
 
 java {
     toolchain {
