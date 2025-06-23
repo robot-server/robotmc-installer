@@ -14,6 +14,7 @@ class InstallerConfig(
 ) {
     init {
         Thread.currentThread().name = UUID.randomUUID().toString()
+        Runtime.getRuntime().addShutdownHook(Thread { log.info { "Shutting down..." } })
 
         log.info { "Environments: ${System.getenv()}" }
         log.info { "Properties: ${System.getProperties()}" }
