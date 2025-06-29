@@ -16,7 +16,7 @@ class ServerService(
         this.getServers()
     }
 
-    fun getServers(path: Path = installerProperties.minecraft.directory.resolve("servers.dat")) {
-        Nbt().fromFile(path.toFile()).also { log.info { "$path: $it" } }
+    fun getServers(path: Path = installerProperties.minecraft.directory.resolve("servers.dat")): ServersDat {
+        return ServersDat(Nbt().fromFile(path.toFile()).also { log.info { "$path: $it" } })
     }
 }
