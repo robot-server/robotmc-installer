@@ -6,7 +6,6 @@ import io.github.oshai.kotlinlogging.KotlinLogging
 import org.springframework.stereotype.Service
 import org.springframework.web.client.RestClient
 import java.nio.file.Files
-import java.nio.file.Path
 import kotlin.io.path.createDirectory
 import kotlin.io.path.name
 
@@ -20,6 +19,9 @@ class ModInstallService(
 ) {
     fun install() {
         val modsDir = installerProperties.minecraft.directory.resolve("mods").also { log.info { it } }
+        if (!Files.exists(modsDir)) {
+            modsDir.createDirectory()
+        }
         val modsOld = installerProperties.minecraft.directory.resolve("mods_old").also { log.info { it } }
         if (!Files.exists(modsOld)) {
             modsOld.createDirectory()
