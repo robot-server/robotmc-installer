@@ -1,6 +1,7 @@
 package com.sysbot32.robotmc.installer.config
 
 import com.sysbot32.robotmc.installer.mod.loader.ModLoaderType
+import com.sysbot32.robotmc.installer.server.ServersDat
 import org.springframework.boot.context.properties.ConfigurationProperties
 import java.nio.file.Path
 import java.nio.file.Paths
@@ -9,6 +10,7 @@ import java.nio.file.Paths
 data class InstallerProperties(
     val minecraft: Minecraft,
     val mod: Mod?,
+    val servers: List<ServersDat.Server> = listOf(),
 ) {
     data class Minecraft(
         val version: String,

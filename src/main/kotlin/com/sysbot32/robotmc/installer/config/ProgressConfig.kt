@@ -10,7 +10,7 @@ class ProgressConfig(
     private val installerProperties: InstallerProperties,
 ) {
     private val max: Int
-        get() = 2 + (installerProperties.mod?.mods?.size ?: 0)
+        get() = 2 + (installerProperties.mod?.mods?.size ?: 0) + installerProperties.servers.size
 
     @Bean
     fun progressBar(): ProgressBar {
