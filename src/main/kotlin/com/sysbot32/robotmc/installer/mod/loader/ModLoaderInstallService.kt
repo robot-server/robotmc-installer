@@ -1,8 +1,8 @@
 package com.sysbot32.robotmc.installer.mod.loader
 
 import com.sysbot32.robotmc.installer.config.InstallerProperties
-import com.sysbot32.robotmc.installer.gui.InProgressDialog
 import com.sysbot32.robotmc.installer.launcher.LauncherService
+import com.sysbot32.robotmc.installer.progress.ProgressService
 import io.github.oshai.kotlinlogging.KotlinLogging
 import org.apache.commons.exec.CommandLine
 import org.apache.commons.exec.DefaultExecutor
@@ -18,7 +18,7 @@ class ModLoaderInstallService(
     private val launcherService: LauncherService,
     private val restClient: RestClient,
     private val installerProperties: InstallerProperties,
-    private val inProgressDialog: InProgressDialog,
+    private val progressService: ProgressService,
 ) {
     fun install() {
         log.info { "Minecraft ${installerProperties.minecraft.version}" }
@@ -36,7 +36,7 @@ class ModLoaderInstallService(
                 .toEntity(ByteArray::class.java)
                 .body?.let { Files.write(installerPath, it) }
         }
-        inProgressDialog.progressBar.value++
+        this.progressService.step()
 
         val lastVersionId = when (installerProperties.mod.loader.type) {
             ModLoaderType.NEO_FORGE -> "${installerProperties.mod.loader.type.displayName.lowercase()}-${installerProperties.mod.loader.version}"
@@ -50,6 +50,6 @@ class ModLoaderInstallService(
                     ).also { log.info { "$it" } })
             }
         }
-        inProgressDialog.progressBar.value++
+        this.progressService.step()
     }
 }
