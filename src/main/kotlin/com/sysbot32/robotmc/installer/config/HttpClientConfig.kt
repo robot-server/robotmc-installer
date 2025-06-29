@@ -14,8 +14,10 @@ class HttpClientConfig {
         return RestClient.builder()
             .requestInterceptor { request, body, execution ->
                 log.info { "${request.method} ${request.uri}" }
+                val start = System.currentTimeMillis()
                 val response = execution.execute(request, body)
-                log.info { "${response.statusCode}" }
+                val end = System.currentTimeMillis()
+                log.info { "${response.statusCode} ${end - start}ms" }
                 return@requestInterceptor response
             }
             .build()
