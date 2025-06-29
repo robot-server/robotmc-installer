@@ -3,6 +3,7 @@ plugins {
     kotlin("plugin.spring") version "1.9.25"
     id("org.springframework.boot") version "3.5.0"
     id("io.spring.dependency-management") version "1.1.7"
+    id("edu.sc.seis.launch4j") version "3.0.6"
 }
 
 group = "com.sysbot32"
