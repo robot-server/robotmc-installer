@@ -15,6 +15,12 @@ data class ServersDat(
         servers = nbt.getList<CompoundTag>("servers").map { Server(it) },
     )
 
+    fun toNbt(): CompoundTag {
+        return CompoundTag().apply {
+            putList("servers", servers.map { it.toNbt() })
+        }
+    }
+
     /**
      * Information about the server.
      */
@@ -32,5 +38,12 @@ data class ServersDat(
             ip = nbt.getString("ip").value,
             name = nbt.getString("name").value,
         )
+
+        fun toNbt(): CompoundTag {
+            return CompoundTag().apply {
+                putString("ip", ip)
+                putString("name", this@Server.name)
+            }
+        }
     }
 }
