@@ -10,7 +10,7 @@ installer:
   mod:
     loader:
       type: neo_forge
-      version: 21.1.179
+      version: 21.1.194
       install-options:
         - '--install-client'
     mods:
@@ -47,5 +47,5 @@ installer:
       - download-url: 'https://cdn.modrinth.com/data/kkmrDlKT/versions/6e8GCrLb/TerraBlender-neoforge-1.21.1-4.1.0.8.jar'
       - download-url: 'https://cdn.modrinth.com/data/8oi3bsk5/versions/MuJMtPGQ/Terralith_1.21.x_v2.5.8.jar'
       - download-url: 'https://cdn.modrinth.com/data/ge1sOdFH/versions/mboAbksk/ToughAsNails-neoforge-1.21.1-10.1.0.13.jar'
-      - download-url: 'https://cdn.modrinth.com/data/1bokaNcj/versions/jSwPt0Wh/Xaeros_Minimap_25.2.6_NeoForge_1.21.jar'
+      - download-url: 'https://cdn.modrinth.com/data/1bokaNcj/versions/DyuxZXfy/Xaeros_Minimap_25.2.10_NeoForge_1.21.jar'
       - download-url: 'https://cdn.modrinth.com/data/NcUtCpym/versions/Lt2vbZZU/XaerosWorldMap_1.39.9_NeoForge_1.21.jar'
