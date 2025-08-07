@@ -6,6 +6,7 @@ import dev.dewy.nbt.Nbt
 import io.github.oshai.kotlinlogging.KotlinLogging
 import org.springframework.stereotype.Service
 import java.nio.file.Path
+import kotlin.io.path.exists
 
 private val log = KotlinLogging.logger { }
 
@@ -15,6 +16,11 @@ class ServerService(
     private val progressService: ProgressService,
 ) {
     fun getServers(path: Path = installerProperties.minecraft.directory.resolve("servers.dat")): ServersDat {
+        if (!path.exists()) {
+            return ServersDat(
+                servers = listOf(),
+            )
+        }
         return ServersDat(Nbt().fromFile(path.toFile()).also { log.info { "$path: $it" } })
     }
 
