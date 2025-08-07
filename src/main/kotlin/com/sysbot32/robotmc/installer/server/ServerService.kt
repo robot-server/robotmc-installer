@@ -28,8 +28,10 @@ class ServerService(
         path: Path = installerProperties.minecraft.directory.resolve("servers.dat"),
         server: ServersDat.Server,
     ) {
-        Nbt().toFile(this.getServers(path).run { copy(servers = servers + listOf(server)) }.toNbt(), path.toFile())
-            .also { "$path: $it" }
+        Nbt().toFile(this.getServers(path).run {
+            if (servers.none { it.ip == server.ip }) copy(servers = servers + listOf(server)) else this
+        }.toNbt(), path.toFile())
+            .also { log.info { "$path: $it" } }
     }
 
     fun addServers(servers: List<ServersDat.Server> = installerProperties.servers) {
