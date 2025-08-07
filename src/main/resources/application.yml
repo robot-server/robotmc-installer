@@ -48,4 +48,4 @@ installer:
       - download-url: 'https://cdn.modrinth.com/data/8oi3bsk5/versions/MuJMtPGQ/Terralith_1.21.x_v2.5.8.jar'
       - download-url: 'https://cdn.modrinth.com/data/ge1sOdFH/versions/mboAbksk/ToughAsNails-neoforge-1.21.1-10.1.0.13.jar'
       - download-url: 'https://cdn.modrinth.com/data/1bokaNcj/versions/DyuxZXfy/Xaeros_Minimap_25.2.10_NeoForge_1.21.jar'
-      - download-url: 'https://cdn.modrinth.com/data/NcUtCpym/versions/Lt2vbZZU/XaerosWorldMap_1.39.9_NeoForge_1.21.jar'
+      - download-url: 'https://cdn.modrinth.com/data/NcUtCpym/versions/3WghnUq9/XaerosWorldMap_1.39.12_NeoForge_1.21.jar'
