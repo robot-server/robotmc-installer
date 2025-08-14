@@ -10,7 +10,7 @@ installer:
   mod:
     loader:
       type: neo_forge
-      version: 21.1.194
+      version: 21.1.200
       install-options:
         - '--install-client'
     mods:
