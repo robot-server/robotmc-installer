@@ -1,5 +1,6 @@
 package com.sysbot32.robotmc.installer
 
+import com.sysbot32.robotmc.installer.exception.UserException
 import com.sysbot32.robotmc.installer.gui.InProgressDialog
 import com.sysbot32.robotmc.installer.mod.ModInstallService
 import com.sysbot32.robotmc.installer.mod.loader.ModLoaderInstallService
@@ -41,6 +42,18 @@ fun main(args: Array<String>) {
             log.info { "========== End ==========" }
             JOptionPane.showMessageDialog(null, "완료됐어요.")
             exitProcess(0)
+        } catch (e: UserException) {
+            log.error(e) { e.message }
+            if (!GraphicsEnvironment.isHeadless()) {
+                JOptionPane.showMessageDialog(
+                    null,
+                    e.message,
+                    "오류",
+                    JOptionPane.ERROR_MESSAGE
+                )
+            }
+            e.afterThrow()
+            exitProcess(e.exitStatus)
         } catch (e: Exception) {
             log.error(e) { e.message }
             if (!GraphicsEnvironment.isHeadless()) {
