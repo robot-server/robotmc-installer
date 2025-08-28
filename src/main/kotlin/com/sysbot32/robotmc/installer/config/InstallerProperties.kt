@@ -40,6 +40,7 @@ data class InstallerProperties(
 
         data class Mod(
             val downloadUrl: String,
+            val required: Boolean = true,
         )
     }
 }
