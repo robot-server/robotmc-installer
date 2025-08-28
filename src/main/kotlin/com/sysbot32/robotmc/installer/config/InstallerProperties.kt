@@ -25,6 +25,7 @@ data class InstallerProperties(
                 else -> Paths.get(System.getProperty("user.home", ".")).resolve(".minecraft")
             }
         },
+        val downloadUrl: String = "https://www.minecraft.net/ko-kr/download",
     )
 
     data class Mod(
