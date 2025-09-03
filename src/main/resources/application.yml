@@ -39,7 +39,7 @@ installer:
       - download-url: 'https://cdn.modrinth.com/data/G1hIVOrD/versions/x99nCLTm/resourcefullib-neoforge-1.21-3.0.12.jar'
       - download-url: 'https://cdn.modrinth.com/data/e0bNACJD/versions/SPj5bJoM/SereneSeasons-neoforge-1.21.1-10.1.0.3.jar'
       - download-url: 'https://cdn.modrinth.com/data/2zaNpyqY/versions/JtxDTlka/sky_aesthetics-neoforge-1.7.1.jar'
-      - download-url: 'https://cdn.modrinth.com/data/ItTQpuBn/versions/9pNw54ZO/stellaris-1.21-neoforge-1.4.8.jar'
+      - download-url: 'https://cdn.modrinth.com/data/ItTQpuBn/versions/EgGvNR7Q/stellaris-1.21-neoforge-1.4.9.jar'
       - download-url: 'https://cdn.modrinth.com/data/AANobbMI/versions/Pb3OXVqC/sodium-neoforge-0.6.13+mc1.21.1.jar'
       - download-url: 'https://cdn.modrinth.com/data/PxQSWIcD/versions/XI0WLXdn/sodiumdynamiclights-neoforge-1.0.10-1.21.1.jar'
       - download-url: 'https://cdn.modrinth.com/data/jZi8ogTA/versions/U63Q6A3m/someassemblyrequired-5.1.2.jar'
