@@ -14,11 +14,19 @@ class ProgressConfig(
 
     @Bean
     fun progressBar(): ProgressBar {
-        return ProgressBar("Installing", this.max.toLong())
+        return ProgressBar("Installing", this.max.toLong()).apply {
+            if (installerProperties.mode == InstallerProperties.Mode.UNINSTALL) {
+                stepTo(this.max)
+            }
+        }
     }
 
     @Bean
     fun jProgressBar(): JProgressBar {
-        return JProgressBar(0, this.max)
+        return JProgressBar(0, this.max).apply {
+            if (installerProperties.mode == InstallerProperties.Mode.UNINSTALL) {
+                value = this.maximum
+            }
+        }
     }
 }
