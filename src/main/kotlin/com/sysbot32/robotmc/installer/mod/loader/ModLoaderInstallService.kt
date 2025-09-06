@@ -1,5 +1,6 @@
 package com.sysbot32.robotmc.installer.mod.loader
 
+import com.sysbot32.robotmc.installer.InstallService
 import com.sysbot32.robotmc.installer.config.InstallerProperties
 import com.sysbot32.robotmc.installer.launcher.LauncherService
 import com.sysbot32.robotmc.installer.progress.ProgressService
@@ -19,8 +20,8 @@ class ModLoaderInstallService(
     private val restClient: RestClient,
     private val installerProperties: InstallerProperties,
     private val progressService: ProgressService,
-) {
-    fun install() {
+) : InstallService {
+    override fun install() {
         log.info { "Minecraft ${installerProperties.minecraft.version}" }
         log.info { "${installerProperties.mod?.loader?.type?.displayName} ${installerProperties.mod?.loader?.version}" }
         val installerUrl = when (installerProperties.mod?.loader?.type) {

@@ -1,5 +1,6 @@
 package com.sysbot32.robotmc.installer.server
 
+import com.sysbot32.robotmc.installer.InstallService
 import com.sysbot32.robotmc.installer.config.InstallerProperties
 import com.sysbot32.robotmc.installer.progress.ProgressService
 import dev.dewy.nbt.Nbt
@@ -14,7 +15,7 @@ private val log = KotlinLogging.logger { }
 class ServerService(
     private val installerProperties: InstallerProperties,
     private val progressService: ProgressService,
-) {
+) : InstallService {
     fun getServers(path: Path = installerProperties.minecraft.directory.resolve("servers.dat")): ServersDat {
         if (!path.exists()) {
             return ServersDat(
@@ -41,4 +42,6 @@ class ServerService(
             this.progressService.step()
         }
     }
+
+    override fun install() = this.addServers()
 }
