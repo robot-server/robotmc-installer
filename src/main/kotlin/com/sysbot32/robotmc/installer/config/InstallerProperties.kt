@@ -8,10 +8,16 @@ import java.nio.file.Paths
 
 @ConfigurationProperties(prefix = "installer")
 data class InstallerProperties(
+    val mode: Mode = Mode.INSTALL,
     val minecraft: Minecraft,
     val mod: Mod?,
     val servers: List<ServersDat.Server> = listOf(),
 ) {
+    enum class Mode {
+        INSTALL,
+        UNINSTALL,
+    }
+
     data class Minecraft(
         val version: String,
         val directory: Path = System.getProperty("os.name").lowercase().run {
