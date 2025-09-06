@@ -1,5 +1,6 @@
 package com.sysbot32.robotmc.installer
 
+import com.sysbot32.robotmc.installer.config.InstallerProperties
 import com.sysbot32.robotmc.installer.exception.UserException
 import com.sysbot32.robotmc.installer.gui.InProgressDialog
 import io.github.oshai.kotlinlogging.KotlinLogging
@@ -32,7 +33,12 @@ fun main(args: Array<String>) {
             log.info { "========== Start ==========" }
             val inProgressDialog = getBean(InProgressDialog::class.java)
             inProgressDialog.isVisible = true
-            getBean(MainInstallService::class.java).install()
+            val mode = getBean(InstallerProperties::class.java).mode
+            log.info { "mode: $mode" }
+            when (mode) {
+                InstallerProperties.Mode.INSTALL -> getBean(MainInstallService::class.java).install()
+                InstallerProperties.Mode.UNINSTALL -> getBean(MainInstallService::class.java).uninstall()
+            }
             inProgressDialog.isVisible = false
             log.info { "========== End ==========" }
             JOptionPane.showMessageDialog(null, "완료됐어요.")

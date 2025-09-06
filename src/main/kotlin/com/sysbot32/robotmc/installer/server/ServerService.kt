@@ -47,4 +47,8 @@ class ServerService(
         get() = 30
 
     override fun install() = this.addServers()
+
+    override fun uninstall() {
+        this.progressService.step(-installerProperties.servers.size)
+    }
 }

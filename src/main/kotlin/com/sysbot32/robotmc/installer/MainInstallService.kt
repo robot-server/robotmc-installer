@@ -15,4 +15,8 @@ class MainInstallService(
     override fun install() {
         this.installServices.sortedBy { it.order }.also { log.info { it } }.forEach { it.install() }
     }
+
+    override fun uninstall() {
+        this.installServices.sortedBy { -it.order }.also { log.info { it } }.forEach { it.uninstall() }
+    }
 }

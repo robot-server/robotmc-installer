@@ -8,6 +8,7 @@ import org.springframework.stereotype.Service
 import org.springframework.web.client.RestClient
 import java.nio.file.Files
 import kotlin.io.path.createDirectory
+import kotlin.io.path.deleteIfExists
 import kotlin.io.path.name
 
 private val log = KotlinLogging.logger { }
@@ -54,6 +55,15 @@ class ModInstallService(
                     .body?.let { Files.write(path, it) }
             }
             this.progressService.step()
+        }
+    }
+
+    override fun uninstall() {
+        val modsDir = installerProperties.minecraft.directory.resolve("mods").also { log.info { it } }
+        for (mod in installerProperties.mod?.mods ?: listOf()) {
+            val path = modsDir.resolve(mod.downloadUrl.split("/").last())
+            path.deleteIfExists()
+            this.progressService.step(-1)
         }
     }
 }

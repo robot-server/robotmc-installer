@@ -56,4 +56,8 @@ class ModLoaderInstallService(
         }
         this.progressService.step()
     }
+
+    override fun uninstall() {
+        this.progressService.step(-2)
+    }
 }
