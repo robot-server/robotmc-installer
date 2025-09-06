@@ -18,6 +18,9 @@ class ModInstallService(
     private val installerProperties: InstallerProperties,
     private val progressService: ProgressService,
 ) : InstallService {
+    override val order: Int
+        get() = 20
+
     override fun install() {
         val modsDir = installerProperties.minecraft.directory.resolve("mods").also { log.info { it } }
         if (!Files.exists(modsDir)) {

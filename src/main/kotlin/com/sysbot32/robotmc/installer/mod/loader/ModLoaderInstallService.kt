@@ -21,6 +21,9 @@ class ModLoaderInstallService(
     private val installerProperties: InstallerProperties,
     private val progressService: ProgressService,
 ) : InstallService {
+    override val order: Int
+        get() = 10
+
     override fun install() {
         log.info { "Minecraft ${installerProperties.minecraft.version}" }
         log.info { "${installerProperties.mod?.loader?.type?.displayName} ${installerProperties.mod?.loader?.version}" }

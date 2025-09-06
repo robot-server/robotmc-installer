@@ -43,5 +43,8 @@ class ServerService(
         }
     }
 
+    override val order: Int
+        get() = 30
+
     override fun install() = this.addServers()
 }
