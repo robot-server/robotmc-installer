@@ -21,10 +21,18 @@ fun main(args: Array<String>) {
     }
     runApplication<RobotmcInstallerApplication>(*args).run {
         try {
+            val mode = getBean(InstallerProperties::class.java).mode
+            log.info { "mode: $mode" }
             if (JOptionPane.showConfirmDialog(
                     null,
-                    "서버 접속에 필요한 모드 로더 및 모드를 설치할까요?\n기존 설치 모드는 mods_old로 옮겨집니다.",
-                    "설치",
+                    when (mode) {
+                        InstallerProperties.Mode.INSTALL -> "서버 접속에 필요한 모드 로더 및 모드를 설치할까요?\n기존 설치 모드는 mods_old로 옮겨집니다."
+                        InstallerProperties.Mode.UNINSTALL -> "설치된 모드 로더 및 모드를 제거할까요?"
+                    },
+                    when (mode) {
+                        InstallerProperties.Mode.INSTALL -> "설치"
+                        InstallerProperties.Mode.UNINSTALL -> "제거"
+                    },
                     JOptionPane.YES_NO_OPTION
                 ) != JOptionPane.YES_OPTION
             ) {
@@ -33,8 +41,6 @@ fun main(args: Array<String>) {
             log.info { "========== Start ==========" }
             val inProgressDialog = getBean(InProgressDialog::class.java)
             inProgressDialog.isVisible = true
-            val mode = getBean(InstallerProperties::class.java).mode
-            log.info { "mode: $mode" }
             when (mode) {
                 InstallerProperties.Mode.INSTALL -> getBean(MainInstallService::class.java).install()
                 InstallerProperties.Mode.UNINSTALL -> getBean(MainInstallService::class.java).uninstall()
