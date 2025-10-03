@@ -12,7 +12,7 @@ group = "com.sysbot32"
  * 기존 사용자 업데이트 필요 - 마이너
  * 기존 사용자 업데이트 필요 없음 - 패치
  */
-version = "0.2.0"
+version = "0.2.1"
 
 java {
     toolchain {
