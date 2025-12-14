@@ -20,3 +20,5 @@ installer:
   servers:
     - ip: minecraft.o-r.cc
       name: Robot Server
+  resource-packs:
+    - download-url: 'https://cdn.modrinth.com/data/r4GILswZ/versions/vyty9ijM/Faithful 64x - December 2025 Release.zip'
