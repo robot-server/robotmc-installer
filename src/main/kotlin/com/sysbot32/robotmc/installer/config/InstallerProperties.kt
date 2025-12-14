@@ -12,6 +12,7 @@ data class InstallerProperties(
     val minecraft: Minecraft,
     val mod: Mod?,
     val servers: List<ServersDat.Server> = listOf(),
+    val resourcePacks: List<ResourcePack> = listOf(),
 ) {
     enum class Mode {
         INSTALL,
@@ -49,4 +50,8 @@ data class InstallerProperties(
             val required: Boolean = true,
         )
     }
+
+    data class ResourcePack(
+        val downloadUrl: String,
+    )
 }
