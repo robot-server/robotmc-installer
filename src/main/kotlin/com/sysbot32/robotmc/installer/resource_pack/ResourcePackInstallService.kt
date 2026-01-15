@@ -29,7 +29,9 @@ class ResourcePackInstallService(
         }
         resourcePackDir.toFile().listFiles()?.forEach { log.info { it } }
         for (resourcePack in installerProperties.resourcePacks) {
-            val path = resourcePackDir.resolve(resourcePack.downloadUrl.split("/").last())
+            val fileName = resourcePack.downloadUrl.split("/").last()
+            this.progressService.setStatus("리소스 팩 다운로드 중: $fileName")
+            val path = resourcePackDir.resolve(fileName)
             if (!Files.exists(path)) {
                 this.restClient.get()
                     .uri(resourcePack.downloadUrl)
@@ -44,7 +46,9 @@ class ResourcePackInstallService(
     override fun uninstall() {
         val resourcePackDir = installerProperties.minecraft.directory.resolve("resourcepacks").also { log.info { it } }
         for (resourcePack in installerProperties.resourcePacks) {
-            val path = resourcePackDir.resolve(resourcePack.downloadUrl.split("/").last())
+            val fileName = resourcePack.downloadUrl.split("/").last()
+            this.progressService.setStatus("리소스 팩 삭제 중: $fileName")
+            val path = resourcePackDir.resolve(fileName)
             path.deleteIfExists()
             this.progressService.step(-1)
         }

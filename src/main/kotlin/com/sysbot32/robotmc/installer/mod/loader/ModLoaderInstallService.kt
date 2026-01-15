@@ -34,13 +34,14 @@ class ModLoaderInstallService(
         }
         val installerPath = Paths.get(installerUrl.split("/").last())
         if (!Files.exists(installerPath)) {
+            this.progressService.setStatus("모드 로더 설치 프로그램 다운로드 중...")
             this.restClient.get()
                 .uri(installerUrl)
                 .retrieve()
                 .toEntity(ByteArray::class.java)
                 .body?.let { Files.write(installerPath, it) }
         }
-        this.progressService.step()
+        this.progressService.step("모드 로더 설치 중...")
 
         val lastVersionId = when (installerProperties.mod.loader.type) {
             ModLoaderType.NEO_FORGE -> "${installerProperties.mod.loader.type.displayName.lowercase()}-${installerProperties.mod.loader.version}"
@@ -58,6 +59,7 @@ class ModLoaderInstallService(
     }
 
     override fun uninstall() {
+        this.progressService.setStatus("모드 로더 제거 중...")
         this.progressService.step(-2)
     }
 }

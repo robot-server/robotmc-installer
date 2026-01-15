@@ -38,6 +38,7 @@ class ServerService(
     fun addServers(servers: List<ServersDat.Server> = installerProperties.servers) {
         this.getServers().also { log.info { it } }
         for (server in servers) {
+            this.progressService.setStatus("서버 추가 중: ${server.name}")
             this.addServer(server = server)
             this.progressService.step()
         }
@@ -49,6 +50,7 @@ class ServerService(
     override fun install() = this.addServers()
 
     override fun uninstall() {
+        this.progressService.setStatus("서버 목록 유지 중...")
         this.progressService.step(-installerProperties.servers.size)
     }
 }

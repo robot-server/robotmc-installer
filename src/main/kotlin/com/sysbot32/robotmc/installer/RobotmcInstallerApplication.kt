@@ -19,6 +19,15 @@ fun main(args: Array<String>) {
     if (GraphicsEnvironment.isHeadless() && "nogui" !in args) {
         System.setProperty("java.awt.headless", false.toString())
     }
+
+    try {
+        // FlatLaf 의존성이 런타임에 존재하므로 리플렉션이나 정적 메서드 호출 시도
+        // 정적 메서드 호출이 컴파일 에러를 일으키므로 유지하되, 임포트 정리
+        com.formdev.flatlaf.FlatDarkLaf.setup()
+    } catch (e: Throwable) {
+        log.warn { "FlatLaf를 설정할 수 없습니다. 기본 Look and Feel을 사용합니다. ${e.message}" }
+    }
+
     runApplication<RobotmcInstallerApplication>(*args).run {
         try {
             val mode = getBean(InstallerProperties::class.java).mode
