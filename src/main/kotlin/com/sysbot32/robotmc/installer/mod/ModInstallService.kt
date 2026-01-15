@@ -24,6 +24,7 @@ class ModInstallService(
 
     override fun install() {
         val modsDir = installerProperties.minecraft.directory.resolve("mods").also { log.info { it } }
+        this.progressService.setStatus("모드 폴더 준비 중...")
         if (!Files.exists(modsDir)) {
             modsDir.createDirectory()
         }
@@ -42,7 +43,9 @@ class ModInstallService(
         }
 
         for (mod in installerProperties.mod?.mods ?: listOf()) {
-            val path = modsDir.resolve(mod.downloadUrl.split("/").last())
+            val fileName = mod.downloadUrl.split("/").last()
+            this.progressService.setStatus("모드 다운로드 중: $fileName")
+            val path = modsDir.resolve(fileName)
             val backupFile = modsOld.resolve(path.name)
             if (Files.exists(backupFile)) {
                 backupFile.toFile().copyTo(path.toFile())
@@ -61,7 +64,9 @@ class ModInstallService(
     override fun uninstall() {
         val modsDir = installerProperties.minecraft.directory.resolve("mods").also { log.info { it } }
         for (mod in installerProperties.mod?.mods ?: listOf()) {
-            val path = modsDir.resolve(mod.downloadUrl.split("/").last())
+            val fileName = mod.downloadUrl.split("/").last()
+            this.progressService.setStatus("모드 삭제 중: $fileName")
+            val path = modsDir.resolve(fileName)
             path.deleteIfExists()
             this.progressService.step(-1)
         }
