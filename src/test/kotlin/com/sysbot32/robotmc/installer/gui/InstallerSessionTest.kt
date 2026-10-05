@@ -3,6 +3,8 @@ package com.sysbot32.robotmc.installer.gui
 import com.sysbot32.robotmc.installer.config.InstallerProperties.Mode
 import com.sysbot32.robotmc.installer.exception.UserException
 import com.sysbot32.robotmc.installer.progress.ProgressService
+import java.util.concurrent.CyclicBarrier
+import java.util.concurrent.atomic.AtomicInteger
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
@@ -195,6 +197,29 @@ class InstallerSessionTest {
         assertEquals("오류가 발생했어요.\n로그 파일을 첨부해서 제보해 주세요.", state.message)
         assertNotEquals(0, state.exitCode)
         assertEquals(InstallerSession.GENERIC_FAILURE_EXIT, state.exitCode)
+    }
+
+    // 확률적 회귀 감지. 락으로 묶기 전에는 약 1e-5 확률로 work가 두 번 실행돼요.
+    @Test
+    fun acceptRacingSwitchModeNeverAllowsASecondRun() {
+        repeat(100_000) {
+            val runs = AtomicInteger()
+            val session = openSession { _ -> runs.incrementAndGet() }
+            val barrier = CyclicBarrier(2)
+            val t = Thread {
+                barrier.await()
+                session.switchMode(Mode.UNINSTALL)
+            }
+            t.start()
+            barrier.await()
+            session.accept()
+            t.join()
+            if (session.state.value.phase == SessionPhase.Finished) {
+                val before = runs.get()
+                session.accept()
+                assertEquals(before, runs.get())
+            }
+        }
     }
 
     private fun openSession(
