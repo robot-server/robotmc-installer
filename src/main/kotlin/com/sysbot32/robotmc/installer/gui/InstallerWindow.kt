@@ -25,6 +25,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.window.WindowPosition
 import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.key.Key
@@ -79,7 +80,11 @@ fun InstallerWindow(
             }
         },
         title = windowTitle(state),
-        state = rememberWindowState(width = 520.dp, height = 420.dp),
+        state = rememberWindowState(
+            position = WindowPosition(Alignment.Center),
+            width = 520.dp,
+            height = 420.dp,
+        ),
     ) {
         LaunchedEffect(Unit) {
             applicationMenu = registerApplicationMenu(
