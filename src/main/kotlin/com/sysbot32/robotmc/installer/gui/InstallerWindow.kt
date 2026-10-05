@@ -2,6 +2,7 @@ package com.sysbot32.robotmc.installer.gui
 
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
@@ -23,26 +24,29 @@ import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.window.WindowPosition
-import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.key.Key
 import androidx.compose.ui.input.key.KeyShortcut
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.DpSize
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.DialogWindow
 import androidx.compose.ui.window.MenuBar
 import androidx.compose.ui.window.Window
+import androidx.compose.ui.window.WindowPosition
+import androidx.compose.ui.window.WindowState
 import androidx.compose.ui.window.rememberDialogState
 import androidx.compose.ui.window.rememberWindowState
 import com.sysbot32.robotmc.installer.config.InstallerProperties
 import io.github.oshai.kotlinlogging.KotlinLogging
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
-import androidx.compose.runtime.rememberCoroutineScope
+import java.awt.Toolkit
+import java.awt.Window as AwtWindow
 
 private val log = KotlinLogging.logger { }
 
@@ -77,10 +81,6 @@ fun InstallerWindow(
         height = 420.dp,
     )
     val detailsOpen = showPlan && state.phase == SessionPhase.Confirm
-    LaunchedEffect(detailsOpen) {
-        windowState.size = DpSize(520.dp, if (detailsOpen) 720.dp else 420.dp)
-        windowState.position = WindowPosition(Alignment.Center)
-    }
     Window(
         onCloseRequest = {
             when (session.state.value.phase) {
@@ -95,6 +95,11 @@ fun InstallerWindow(
         title = windowTitle(state),
         state = windowState,
     ) {
+        LaunchedEffect(detailsOpen) {
+            val height = windowHeight(detailsOpen, window)
+            windowState.size = DpSize(520.dp, height)
+            moveInsideScreen(windowState, window)
+        }
         LaunchedEffect(Unit) {
             applicationMenu = registerApplicationMenu(
                 onAbout = { panel = InfoPanel.About },
@@ -244,42 +249,39 @@ private fun InstallerScreen(
     onExit: (Int) -> Unit,
 ) {
     val scope = rememberCoroutineScope()
-    LaunchedEffect(Unit) {
-        log.info { "화면 표시: ${state.phase}" }
-    }
     InstallerSurface {
-            Column(
-                modifier = Modifier.fillMaxSize().padding(horizontal = 32.dp, vertical = 28.dp),
-                verticalArrangement = Arrangement.spacedBy(16.dp),
-            ) {
-                Text(
-                    APPLICATION_NAME,
-                    style = MaterialTheme.typography.labelLarge,
-                    color = MaterialTheme.colorScheme.primary,
+        Column(
+            modifier = Modifier.fillMaxSize().padding(horizontal = 32.dp, vertical = 28.dp),
+            verticalArrangement = Arrangement.spacedBy(16.dp),
+        ) {
+            Text(
+                APPLICATION_NAME,
+                style = MaterialTheme.typography.labelLarge,
+                color = MaterialTheme.colorScheme.primary,
+            )
+            when (state.phase) {
+                SessionPhase.Confirm -> ConfirmPhase(
+                    state = state,
+                    properties = properties,
+                    showPlan = showPlan,
+                    onTogglePlan = onTogglePlan,
+                    modifier = Modifier.weight(1f),
+                    onDecline = {
+                        session.decline()
+                        onExit(session.state.value.exitCode ?: 0)
+                    },
+                    onAccept = {
+                        scope.launch(Dispatchers.IO) { session.accept() }
+                    },
                 )
-                when (state.phase) {
-                    SessionPhase.Confirm -> ConfirmPhase(
-                        state = state,
-                        properties = properties,
-                        showPlan = showPlan,
-                        onTogglePlan = onTogglePlan,
-                        modifier = Modifier.weight(1f),
-                        onDecline = {
-                            session.decline()
-                            onExit(session.state.value.exitCode ?: 0)
-                        },
-                        onAccept = {
-                            scope.launch(Dispatchers.IO) { session.accept() }
-                        },
-                    )
-                    SessionPhase.Working -> WorkingPhase(state, Modifier.weight(1f))
-                    SessionPhase.Finished -> FinishedPhase(
-                        state = state,
-                        modifier = Modifier.weight(1f),
-                        onClose = { onExit(state.exitCode ?: InstallerSession.GENERIC_FAILURE_EXIT) },
-                    )
-                }
+                SessionPhase.Working -> WorkingPhase(state, Modifier.weight(1f))
+                SessionPhase.Finished -> FinishedPhase(
+                    state = state,
+                    modifier = Modifier.weight(1f),
+                    onClose = { onExit(state.exitCode ?: InstallerSession.GENERIC_FAILURE_EXIT) },
+                )
             }
+        }
     }
 }
 
@@ -398,6 +400,49 @@ private fun ColumnScope.FinishedPhase(
             onClick = onClose,
             modifier = Modifier.align(Alignment.End),
         ) { Text("닫기") }
+    }
+}
+
+private fun windowHeight(detailsOpen: Boolean, window: AwtWindow): Dp {
+    val config = window.graphicsConfiguration
+    val insets = Toolkit.getDefaultToolkit().getScreenInsets(config)
+    val usable = (config.bounds.height - insets.top - insets.bottom).coerceAtLeast(1)
+    val desired = if (detailsOpen) 720 else 420
+    return minOf(desired, usable).dp
+}
+
+/**
+ * 처음 위치는 [WindowPosition]의 가운데 정렬이 정한다.
+ * 자세히 보기로 커진 뒤에 화면 밖으로 나가면, 가운데로 되돌리지 않고 들어가는 만큼만 옮긴다.
+ */
+private fun moveInsideScreen(windowState: WindowState, window: AwtWindow) {
+    val position = windowState.position
+    if (!position.isSpecified) {
+        return
+    }
+    val config = window.graphicsConfiguration
+    val insets = Toolkit.getDefaultToolkit().getScreenInsets(config)
+    val bounds = config.bounds
+    val usableLeft = bounds.x + insets.left
+    val usableTop = bounds.y + insets.top
+    val usableRight = bounds.x + bounds.width - insets.right
+    val usableBottom = bounds.y + bounds.height - insets.bottom
+    val width = windowState.size.width.value
+    val height = windowState.size.height.value
+    val maxX = usableRight - width
+    val maxY = usableBottom - height
+    val x = if (maxX < usableLeft) {
+        usableLeft.toFloat()
+    } else {
+        position.x.value.coerceIn(usableLeft.toFloat(), maxX.toFloat())
+    }
+    val y = if (maxY < usableTop) {
+        usableTop.toFloat()
+    } else {
+        position.y.value.coerceIn(usableTop.toFloat(), maxY.toFloat())
+    }
+    if (x != position.x.value || y != position.y.value) {
+        windowState.position = WindowPosition(x.dp, y.dp)
     }
 }
 

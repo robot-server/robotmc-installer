@@ -173,6 +173,18 @@ class InstallerSessionTest {
     }
 
     @Test
+    fun errorFinishesWithTheReportMessage() {
+        val session = openSession { _ -> throw Error("native") }
+
+        session.accept()
+
+        val state = session.state.value
+        assertEquals(SessionPhase.Finished, state.phase)
+        assertEquals("오류가 발생했어요.\n로그 파일을 첨부해서 제보해 주세요.", state.message)
+        assertEquals(InstallerSession.GENERIC_FAILURE_EXIT, state.exitCode)
+    }
+
+    @Test
     fun genericExceptionFinishesWithTheReportMessage() {
         val session = openSession { _ -> throw IllegalStateException("disk full") }
 
