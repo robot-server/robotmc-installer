@@ -15,6 +15,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.material3.darkColorScheme
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -30,6 +31,7 @@ import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.key.Key
 import androidx.compose.ui.input.key.KeyShortcut
+import androidx.compose.ui.unit.DpSize
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.DialogWindow
 import androidx.compose.ui.window.MenuBar
@@ -68,6 +70,17 @@ fun InstallerWindow(
     var panel by remember { mutableStateOf<InfoPanel?>(null) }
     var applicationMenu by remember { mutableStateOf(false) }
     var menuReady by remember { mutableStateOf(false) }
+    var showPlan by remember { mutableStateOf(false) }
+    val windowState = rememberWindowState(
+        position = WindowPosition(Alignment.Center),
+        width = 520.dp,
+        height = 420.dp,
+    )
+    val detailsOpen = showPlan && state.phase == SessionPhase.Confirm
+    LaunchedEffect(detailsOpen) {
+        windowState.size = DpSize(520.dp, if (detailsOpen) 720.dp else 420.dp)
+        windowState.position = WindowPosition(Alignment.Center)
+    }
     Window(
         onCloseRequest = {
             when (session.state.value.phase) {
@@ -80,11 +93,7 @@ fun InstallerWindow(
             }
         },
         title = windowTitle(state),
-        state = rememberWindowState(
-            position = WindowPosition(Alignment.Center),
-            width = 520.dp,
-            height = 420.dp,
-        ),
+        state = windowState,
     ) {
         LaunchedEffect(Unit) {
             applicationMenu = registerApplicationMenu(
@@ -122,7 +131,14 @@ fun InstallerWindow(
                 )
             }
         }
-        InstallerScreen(session, state, onExit)
+        InstallerScreen(
+            session = session,
+            properties = properties,
+            state = state,
+            showPlan = showPlan,
+            onTogglePlan = { showPlan = !showPlan },
+            onExit = onExit,
+        )
     }
     when (panel) {
         InfoPanel.About -> AboutDialog(onClose = { panel = null })
@@ -221,7 +237,10 @@ private fun InstallerSurface(content: @Composable () -> Unit) {
 @Composable
 private fun InstallerScreen(
     session: InstallerSession,
+    properties: InstallerProperties,
     state: SessionState,
+    showPlan: Boolean,
+    onTogglePlan: () -> Unit,
     onExit: (Int) -> Unit,
 ) {
     val scope = rememberCoroutineScope()
@@ -241,6 +260,9 @@ private fun InstallerScreen(
                 when (state.phase) {
                     SessionPhase.Confirm -> ConfirmPhase(
                         state = state,
+                        properties = properties,
+                        showPlan = showPlan,
+                        onTogglePlan = onTogglePlan,
                         modifier = Modifier.weight(1f),
                         onDecline = {
                             session.decline()
@@ -264,6 +286,9 @@ private fun InstallerScreen(
 @Composable
 private fun ColumnScope.ConfirmPhase(
     state: SessionState,
+    properties: InstallerProperties,
+    showPlan: Boolean,
+    onTogglePlan: () -> Unit,
     modifier: Modifier,
     onDecline: () -> Unit,
     onAccept: () -> Unit,
@@ -271,7 +296,43 @@ private fun ColumnScope.ConfirmPhase(
     Column(modifier = modifier, verticalArrangement = Arrangement.spacedBy(16.dp)) {
         Text(InstallerSession.actionLabel(state.mode), style = MaterialTheme.typography.headlineMedium)
         Text(state.prompt, style = MaterialTheme.typography.bodyLarge)
-        Spacer(Modifier.weight(1f))
+        Text(
+            "Minecraft ${properties.minecraft.version}",
+            style = MaterialTheme.typography.labelLarge,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+        TextButton(
+            onClick = onTogglePlan,
+            modifier = Modifier.align(Alignment.Start),
+        ) {
+            Text(if (showPlan) "접기" else "자세히 보기")
+        }
+        Column(
+            modifier = Modifier.weight(1f).fillMaxWidth().verticalScroll(rememberScrollState()),
+            verticalArrangement = Arrangement.spacedBy(12.dp),
+        ) {
+            if (showPlan) {
+                properties.plan(state.mode).forEach { section ->
+                    Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                        Text(
+                            section.title,
+                            style = MaterialTheme.typography.labelMedium,
+                            color = MaterialTheme.colorScheme.primary,
+                        )
+                        section.items.forEach { item ->
+                            Text(item, style = MaterialTheme.typography.bodyMedium)
+                        }
+                    }
+                }
+                if (state.mode == InstallerProperties.Mode.UNINSTALL && properties.servers.isNotEmpty()) {
+                    Text(
+                        "서버 목록은 그대로 둬요.",
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
+            }
+        }
         Row(
             modifier = Modifier.align(Alignment.End),
             horizontalArrangement = Arrangement.spacedBy(12.dp),

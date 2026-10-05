@@ -11,6 +11,34 @@ data class SettingsRow(
     val value: String,
 )
 
+data class PlanSection(
+    val title: String,
+    val items: List<String>,
+)
+
+fun InstallerProperties.plan(mode: InstallerProperties.Mode = this.mode): List<PlanSection> {
+    val sections = mutableListOf<PlanSection>()
+    this.mod?.loader?.let { loader ->
+        val version = loader.version?.let { " $it" }.orEmpty()
+        sections += PlanSection("모드 로더", listOf(loader.type.displayName + version))
+    }
+    val mods = this.mod?.mods?.map { it.downloadUrl.substringAfterLast('/') }.orEmpty()
+    if (mods.isNotEmpty()) {
+        sections += PlanSection("모드", mods)
+    }
+    if (mode == InstallerProperties.Mode.INSTALL) {
+        val servers = this.servers.map { "${it.name} (${it.ip})" }
+        if (servers.isNotEmpty()) {
+            sections += PlanSection("서버", servers)
+        }
+    }
+    val packs = this.resourcePacks.map { it.downloadUrl.substringAfterLast('/') }
+    if (packs.isNotEmpty()) {
+        sections += PlanSection("리소스 팩", packs)
+    }
+    return sections
+}
+
 fun InstallerProperties.settingsRows(mode: InstallerProperties.Mode = this.mode): List<SettingsRow> {
     val rows = mutableListOf(
         SettingsRow(
