@@ -6,12 +6,29 @@ import com.sysbot32.robotmc.installer.launcher.LauncherService
 import com.sysbot32.robotmc.installer.progress.ProgressService
 import io.github.oshai.kotlinlogging.KotlinLogging
 import org.apache.commons.exec.DefaultExecutor
+import org.apache.commons.exec.ExecuteWatchdog
 import org.springframework.stereotype.Service
 import org.springframework.web.client.RestClient
 import java.nio.file.Files
 import java.nio.file.Paths
+import java.time.Duration
 
 private val log = KotlinLogging.logger { }
+
+/**
+ * 설치기가 라이브러리를 받는 동안 끝날 수 있게 여유를 둔다.
+ * 이 시간이 지나도 프로세스가 살아 있으면 watchdog가 끝낸다.
+ */
+val MOD_LOADER_PROCESS_TIMEOUT: Duration = Duration.ofMinutes(30)
+
+fun executeModLoaderCommand(
+    arguments: List<String>,
+    timeout: Duration = MOD_LOADER_PROCESS_TIMEOUT,
+) {
+    val executor = DefaultExecutor.builder().get()
+    executor.watchdog = ExecuteWatchdog.builder().setTimeout(timeout).get()
+    executor.execute(modLoaderCommandLine(arguments))
+}
 
 @Service
 class ModLoaderInstallService(
@@ -46,9 +63,8 @@ class ModLoaderInstallService(
         }
         this.progressService.step("모드 로더 설치 중...")
         if (decision.runInstaller) {
-            val commandLine = modLoaderCommandLine(decision.arguments)
-            log.info { "$commandLine" }
-            DefaultExecutor.builder().get().execute(commandLine)
+            log.info { "${modLoaderCommandLine(decision.arguments)}" }
+            executeModLoaderCommand(decision.arguments)
         }
         this.progressService.step()
     }

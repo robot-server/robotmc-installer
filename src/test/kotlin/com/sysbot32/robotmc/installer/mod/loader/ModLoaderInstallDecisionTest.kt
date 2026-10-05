@@ -1,7 +1,9 @@
 package com.sysbot32.robotmc.installer.mod.loader
 
 import com.sysbot32.robotmc.installer.launcher.LauncherProfilesJson
+import org.apache.commons.exec.ExecuteException
 import java.nio.file.Paths
+import java.time.Duration
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
@@ -71,8 +73,8 @@ class ModLoaderInstallDecisionTest {
     }
 
     @Test
-    fun nullLoaderIsRejected() {
-        assertFailsWith<IllegalArgumentException> {
+    fun missingTypeAndMissingVersionUseDifferentMessages() {
+        val missingType = assertFailsWith<IllegalArgumentException> {
             decideModLoaderInstall(
                 type = null,
                 loaderVersion = "0.16.14",
@@ -82,6 +84,19 @@ class ModLoaderInstallDecisionTest {
                 profiles = profiles(),
             )
         }
+        assertEquals("Unsupported mod loader type null", missingType.message)
+
+        val missingVersion = assertFailsWith<IllegalArgumentException> {
+            decideModLoaderInstall(
+                type = ModLoaderType.FABRIC,
+                loaderVersion = null,
+                minecraftVersion = "1.21.11",
+                minecraftDirectory = Paths.get("/tmp/My Minecraft/instance"),
+                installOptions = listOf("--install-client"),
+                profiles = profiles(),
+            )
+        }
+        assertEquals("Mod loader version is required", missingVersion.message)
     }
 
     private fun fabricDecision(profiles: LauncherProfilesJson): ModLoaderInstallDecision {
@@ -145,5 +160,18 @@ class ModLoaderInstallDecisionTest {
         "-jar",
         "neoforge-21.11.6-beta-installer.jar",
         "--install-client",
+        "/tmp/My Minecraft/instance",
     )
+}
+
+class ModLoaderCommandTest {
+    @Test
+    fun watchdogKillsAProcessThatDoesNotExit() {
+        val started = System.nanoTime()
+        assertFailsWith<ExecuteException> {
+            executeModLoaderCommand(listOf("/bin/sleep", "30"), Duration.ofMillis(500))
+        }
+        val elapsedMs = (System.nanoTime() - started) / 1_000_000
+        assertTrue(elapsedMs < 5_000, "elapsed ${elapsedMs}ms")
+    }
 }
