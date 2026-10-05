@@ -19,20 +19,19 @@ data class PlanSection(
 fun InstallerProperties.plan(mode: InstallerProperties.Mode = this.mode): List<PlanSection> {
     val sections = mutableListOf<PlanSection>()
     this.mod?.loader?.let { loader ->
-        val version = loader.version?.let { " $it" }.orEmpty()
-        sections += PlanSection("모드 로더", listOf(loader.type.displayName + version))
+        sections += PlanSection("모드 로더", listOf(loaderLabel(loader)))
     }
-    val mods = this.mod?.mods?.map { it.downloadUrl.substringAfterLast('/') }.orEmpty()
+    val mods = this.mod?.mods?.map { downloadFileName(it.downloadUrl) }.orEmpty()
     if (mods.isNotEmpty()) {
         sections += PlanSection("모드", mods)
     }
     if (mode == InstallerProperties.Mode.INSTALL) {
-        val servers = this.servers.map { "${it.name} (${it.ip})" }
+        val servers = this.servers.map { serverLabel(it.name, it.ip) }
         if (servers.isNotEmpty()) {
             sections += PlanSection("서버", servers)
         }
     }
-    val packs = this.resourcePacks.map { it.downloadUrl.substringAfterLast('/') }
+    val packs = this.resourcePacks.map { downloadFileName(it.downloadUrl) }
     if (packs.isNotEmpty()) {
         sections += PlanSection("리소스 팩", packs)
     }
@@ -52,20 +51,28 @@ fun InstallerProperties.settingsRows(mode: InstallerProperties.Mode = this.mode)
         SettingsRow("폴더", this.minecraft.directory.toString()),
     )
     this.mod?.loader?.let { loader ->
-        val version = loader.version?.let { " $it" }.orEmpty()
-        rows += SettingsRow("모드 로더", loader.type.displayName + version)
+        rows += SettingsRow("모드 로더", loaderLabel(loader))
     }
     this.mod?.mods?.forEach { mod ->
-        rows += SettingsRow("모드", mod.downloadUrl.substringAfterLast('/'))
+        rows += SettingsRow("모드", downloadFileName(mod.downloadUrl))
     }
     this.servers.forEach { server ->
-        rows += SettingsRow("서버", "${server.name} (${server.ip})")
+        rows += SettingsRow("서버", serverLabel(server.name, server.ip))
     }
     this.resourcePacks.forEach { pack ->
-        rows += SettingsRow("리소스 팩", pack.downloadUrl.substringAfterLast('/'))
+        rows += SettingsRow("리소스 팩", downloadFileName(pack.downloadUrl))
     }
     return rows
 }
+
+private fun loaderLabel(loader: InstallerProperties.Mod.Loader): String {
+    val version = loader.version?.let { " $it" }.orEmpty()
+    return loader.type.displayName + version
+}
+
+private fun downloadFileName(url: String): String = url.substringAfterLast('/')
+
+private fun serverLabel(name: String, ip: String): String = "$name ($ip)"
 
 fun applicationVersion(): String? {
     return InstallerInfo::class.java.`package`?.implementationVersion?.takeIf { it.isNotBlank() }

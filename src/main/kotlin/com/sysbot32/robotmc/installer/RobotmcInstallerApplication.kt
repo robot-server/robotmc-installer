@@ -39,7 +39,6 @@ fun main(args: Array<String>) {
             log.info { "========== End ==========" }
         },
     )
-    log.info { "세션 준비: ${session.state.value.phase}" }
     var exitCode = 0
     application(exitProcessOnExit = false) {
         val app = this

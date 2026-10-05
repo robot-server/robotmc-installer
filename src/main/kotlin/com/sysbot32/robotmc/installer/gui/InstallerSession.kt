@@ -71,20 +71,20 @@ class InstallerSession(
     }
 
     fun switchMode(mode: Mode) {
-        val current = this.state.value
-        if (current.phase == SessionPhase.Working || current.mode == mode) {
-            return
-        }
-        this.decided.set(false)
-        this.update {
-            SessionState(
+        synchronized(this.stateFlow) {
+            val current = this.stateFlow.value
+            if (current.phase == SessionPhase.Working || current.mode == mode) {
+                return
+            }
+            this.decided.set(false)
+            this.stateFlow.value = SessionState(
                 phase = SessionPhase.Confirm,
                 mode = mode,
                 prompt = promptFor(mode),
                 status = "",
                 statuses = emptyList(),
-                completedSteps = if (mode == Mode.UNINSTALL) it.totalSteps else 0,
-                totalSteps = it.totalSteps,
+                completedSteps = if (mode == Mode.UNINSTALL) current.totalSteps else 0,
+                totalSteps = current.totalSteps,
                 message = null,
                 exitCode = null,
                 declined = false,
@@ -93,19 +93,28 @@ class InstallerSession(
     }
 
     fun decline() {
-        if (!this.decided.compareAndSet(false, true)) {
-            return
-        }
-        this.update {
-            it.copy(phase = SessionPhase.Finished, declined = true, exitCode = 0)
+        synchronized(this.stateFlow) {
+            val current = this.stateFlow.value
+            if (current.phase != SessionPhase.Confirm || !this.decided.compareAndSet(false, true)) {
+                return
+            }
+            this.stateFlow.value = current.copy(phase = SessionPhase.Finished, declined = true, exitCode = 0)
         }
     }
 
     fun accept() {
-        if (!this.decided.compareAndSet(false, true)) {
+        val started = synchronized(this.stateFlow) {
+            val current = this.stateFlow.value
+            if (current.phase != SessionPhase.Confirm || !this.decided.compareAndSet(false, true)) {
+                false
+            } else {
+                this.stateFlow.value = current.copy(phase = SessionPhase.Working, status = "준비 중...")
+                true
+            }
+        }
+        if (!started) {
             return
         }
-        this.update { it.copy(phase = SessionPhase.Working, status = "준비 중...") }
         try {
             this.work()
             this.update {
@@ -117,13 +126,13 @@ class InstallerSession(
             log.error(e) { e.message }
             try {
                 e.afterThrow()
-            } catch (after: Exception) {
+            } catch (after: Throwable) {
                 log.error(after) { "afterThrow 실행 중 오류" }
             }
             this.update {
                 it.copy(phase = SessionPhase.Finished, message = e.message, exitCode = e.exitStatus)
             }
-        } catch (e: Exception) {
+        } catch (e: Throwable) {
             log.error(e) { e.message }
             this.update {
                 it.copy(
