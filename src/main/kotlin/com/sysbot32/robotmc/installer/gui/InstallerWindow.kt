@@ -130,7 +130,7 @@ private fun AboutDialog(onClose: () -> Unit) {
                     color = MaterialTheme.colorScheme.primary,
                 )
                 Text(
-                    "서버 접속에 필요한 모드 로더와 모드를 설치하거나 제거합니다.",
+                    "서버 접속에 필요한 모드 로더와 모드를 설치하거나 제거해요.",
                     style = MaterialTheme.typography.bodyLarge,
                 )
                 applicationVersion()?.let { version ->
@@ -164,7 +164,7 @@ private fun SettingsDialog(
             ) {
                 Text("설정", style = MaterialTheme.typography.headlineMedium)
                 Text(
-                    "이 실행에 적용된 구성입니다.",
+                    "이 실행에 적용된 구성이에요.",
                     style = MaterialTheme.typography.bodyMedium,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )

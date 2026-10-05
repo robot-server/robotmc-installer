@@ -129,11 +129,11 @@ class InstallerSession(
 
     companion object {
         const val SUCCESS_MESSAGE = "완료됐어요."
-        const val GENERIC_FAILURE_MESSAGE = "오류가 발생했어요.\n로그 파일 첨부하여 제보 부탁드려요."
+        const val GENERIC_FAILURE_MESSAGE = "오류가 발생했어요.\n로그 파일을 첨부해서 제보해 주세요."
         const val GENERIC_FAILURE_EXIT = -1
 
         fun promptFor(mode: Mode): String = when (mode) {
-            Mode.INSTALL -> "서버 접속에 필요한 모드 로더 및 모드를 설치할까요?\n기존 설치 모드는 mods_old로 옮겨집니다."
+            Mode.INSTALL -> "서버 접속에 필요한 모드 로더 및 모드를 설치할까요?\n기존 설치 모드는 mods_old로 옮겨져요."
             Mode.UNINSTALL -> "설치된 모드 로더 및 모드를 제거할까요?"
         }
 
