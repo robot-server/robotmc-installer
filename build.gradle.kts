@@ -1,6 +1,8 @@
 plugins {
-    kotlin("jvm") version "1.9.25"
-    kotlin("plugin.spring") version "1.9.25"
+    kotlin("jvm") version "2.2.20"
+    kotlin("plugin.spring") version "2.2.20"
+    kotlin("plugin.compose") version "2.2.20"
+    id("org.jetbrains.compose") version "1.12.1"
     id("org.springframework.boot") version "3.5.0"
     id("io.spring.dependency-management") version "1.1.7"
     id("edu.sc.seis.launch4j") version "3.0.6"
@@ -28,6 +30,7 @@ configurations {
 
 repositories {
     mavenCentral()
+    google()
 }
 
 dependencies {
@@ -35,9 +38,9 @@ dependencies {
     implementation("org.jetbrains.kotlin:kotlin-reflect")
     implementation("io.github.oshai:kotlin-logging-jvm:7.0.7")
     implementation("org.apache.commons:commons-exec:1.4.0")
-    implementation("me.tongfei:progressbar:0.10.1")
-    implementation("com.formdev:flatlaf:3.5.4")
     implementation("dev.dewy:nbt:1.5.1")
+    implementation(compose.desktop.currentOs)
+    implementation(compose.material3)
     developmentOnly("org.springframework.boot:spring-boot-devtools")
     annotationProcessor("org.springframework.boot:spring-boot-configuration-processor")
     testImplementation("org.springframework.boot:spring-boot-starter-test")
@@ -46,12 +49,18 @@ dependencies {
 }
 
 kotlin {
+    jvmToolchain(21)
     compilerOptions {
         freeCompilerArgs.addAll("-Xjsr305=strict")
     }
 }
 
+compose.desktop {
+    application {
+        mainClass = "com.sysbot32.robotmc.installer.RobotmcInstallerApplicationKt"
+    }
+}
+
 tasks.withType<Test> {
     useJUnitPlatform()
-    systemProperties["java.awt.headless"] = false
 }
