@@ -29,8 +29,11 @@ fun decideModLoaderInstall(
     installOptions: List<String>,
     profiles: LauncherProfilesJson,
 ): ModLoaderInstallDecision {
-    if (type == null || loaderVersion == null) {
-        throw IllegalArgumentException("Unsupported mod loader type $type")
+    if (type == null) {
+        throw IllegalArgumentException("Unsupported mod loader type null")
+    }
+    if (loaderVersion == null) {
+        throw IllegalArgumentException("Mod loader version is required")
     }
     val installerUrl = installerUrl(type, loaderVersion)
     val profileVersionId = profileVersionId(type, loaderVersion, minecraftVersion)
@@ -80,7 +83,9 @@ private fun installerArguments(
     minecraftDirectory: Path,
     installOptions: List<String>,
 ): List<String> = when (type) {
-    ModLoaderType.NEO_FORGE -> installOptions
+    // --install-client 의 선택 인자. 빠지면 설치기는 OS 기본 .minecraft 에 넣고,
+    // 설치 여부 확인은 minecraft.directory 를 본다.
+    ModLoaderType.NEO_FORGE -> installOptions + minecraftDirectory.toString()
     // Fabric client 설치는 -dir 로 디렉터리 하나를 받는다. loader 버전은 -loader 에만 쓴다.
     ModLoaderType.FABRIC -> listOf(
         "client",
