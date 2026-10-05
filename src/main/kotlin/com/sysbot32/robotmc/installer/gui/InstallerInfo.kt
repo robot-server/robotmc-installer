@@ -11,11 +11,11 @@ data class SettingsRow(
     val value: String,
 )
 
-fun InstallerProperties.settingsRows(): List<SettingsRow> {
+fun InstallerProperties.settingsRows(mode: InstallerProperties.Mode = this.mode): List<SettingsRow> {
     val rows = mutableListOf(
         SettingsRow(
             "동작",
-            when (this.mode) {
+            when (mode) {
                 InstallerProperties.Mode.INSTALL -> "설치"
                 InstallerProperties.Mode.UNINSTALL -> "제거"
             },

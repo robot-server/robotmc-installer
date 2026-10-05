@@ -91,8 +91,8 @@ fun InstallerWindow(
                 log.info { "앱 메뉴 등록: 정보, 설정" }
             }
         }
-        if (menuReady && !applicationMenu) {
-            MenuBar {
+        MenuBar {
+            if (menuReady && !applicationMenu) {
                 Menu(APPLICATION_NAME) {
                     Item("정보", onClick = { panel = InfoPanel.About })
                     Item(
@@ -102,12 +102,26 @@ fun InstallerWindow(
                     )
                 }
             }
+            Menu("동작") {
+                RadioButtonItem(
+                    "설치",
+                    selected = state.mode == InstallerProperties.Mode.INSTALL,
+                    enabled = state.phase != SessionPhase.Working,
+                    onClick = { session.switchMode(InstallerProperties.Mode.INSTALL) },
+                )
+                RadioButtonItem(
+                    "제거",
+                    selected = state.mode == InstallerProperties.Mode.UNINSTALL,
+                    enabled = state.phase != SessionPhase.Working,
+                    onClick = { session.switchMode(InstallerProperties.Mode.UNINSTALL) },
+                )
+            }
         }
         InstallerScreen(session, state, onExit)
     }
     when (panel) {
         InfoPanel.About -> AboutDialog(onClose = { panel = null })
-        InfoPanel.Settings -> SettingsDialog(properties, onClose = { panel = null })
+        InfoPanel.Settings -> SettingsDialog(properties, state.mode, onClose = { panel = null })
         null -> Unit
     }
 }
@@ -150,6 +164,7 @@ private fun AboutDialog(onClose: () -> Unit) {
 @Composable
 private fun SettingsDialog(
     properties: InstallerProperties,
+    mode: InstallerProperties.Mode,
     onClose: () -> Unit,
 ) {
     DialogWindow(
@@ -172,7 +187,7 @@ private fun SettingsDialog(
                     modifier = Modifier.weight(1f).fillMaxWidth().verticalScroll(rememberScrollState()),
                     verticalArrangement = Arrangement.spacedBy(10.dp),
                 ) {
-                    properties.settingsRows().forEach { row ->
+                    properties.settingsRows(mode).forEach { row ->
                         Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
                             Text(
                                 row.label,

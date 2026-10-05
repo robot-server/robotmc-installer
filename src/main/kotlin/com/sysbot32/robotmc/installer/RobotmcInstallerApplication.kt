@@ -25,13 +25,14 @@ fun main(args: Array<String>) {
     val progress = context.getBean(ProgressService::class.java)
     val installer = context.getBean(MainInstallService::class.java)
     log.info { "mode: ${properties.mode}" }
-    val session = InstallerSession(
+    lateinit var session: InstallerSession
+    session = InstallerSession(
         mode = properties.mode,
         totalSteps = properties.plannedSteps(),
         progress = progress,
         work = {
             log.info { "========== Start ==========" }
-            when (properties.mode) {
+            when (session.state.value.mode) {
                 InstallerProperties.Mode.INSTALL -> installer.install()
                 InstallerProperties.Mode.UNINSTALL -> installer.uninstall()
             }
