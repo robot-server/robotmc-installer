@@ -33,7 +33,7 @@ class InstallerSessionTest {
         val uninstall = openSession(mode = Mode.UNINSTALL)
 
         assertEquals(
-            "서버 접속에 필요한 모드 로더 및 모드를 설치할까요?\n기존 설치 모드는 mods_old로 옮겨집니다.",
+            "서버 접속에 필요한 모드 로더 및 모드를 설치할까요?\n기존 설치 모드는 mods_old로 옮겨져요.",
             install.state.value.prompt,
         )
         assertEquals("설치된 모드 로더 및 모드를 제거할까요?", uninstall.state.value.prompt)
@@ -133,7 +133,7 @@ class InstallerSessionTest {
 
         val state = session.state.value
         assertEquals(SessionPhase.Finished, state.phase)
-        assertEquals("오류가 발생했어요.\n로그 파일 첨부하여 제보 부탁드려요.", state.message)
+        assertEquals("오류가 발생했어요.\n로그 파일을 첨부해서 제보해 주세요.", state.message)
         assertNotEquals(0, state.exitCode)
         assertEquals(InstallerSession.GENERIC_FAILURE_EXIT, state.exitCode)
     }
