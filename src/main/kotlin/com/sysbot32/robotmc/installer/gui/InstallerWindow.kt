@@ -53,10 +53,13 @@ private val log = KotlinLogging.logger { }
 private val InstallerColors = darkColorScheme(
     primary = Color(0xFF8BD17C),
     onPrimary = Color(0xFF10210E),
-    background = Color(0xFF121417),
-    surface = Color(0xFF121417),
-    onSurface = Color(0xFFE6E8EB),
-    onSurfaceVariant = Color(0xFFB4B8BE),
+    background = Color(0xFF221C16),
+    surface = Color(0xFF221C16),
+    onSurface = Color(0xFFF3EEE6),
+    onSurfaceVariant = Color(0xFFC4B8A8),
+    surfaceVariant = Color(0xFF3A3128),
+    secondaryContainer = Color(0xFF3A3128),
+    outline = Color(0xFF6E6256),
 )
 
 private enum class InfoPanel {
