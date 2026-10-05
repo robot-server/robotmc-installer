@@ -61,6 +61,15 @@ compose.desktop {
     }
 }
 
+tasks.named<Jar>("jar") {
+    manifest {
+        attributes(
+            "Implementation-Title" to "RobotMC Installer",
+            "Implementation-Version" to project.version,
+        )
+    }
+}
+
 tasks.withType<Test> {
     useJUnitPlatform()
 }

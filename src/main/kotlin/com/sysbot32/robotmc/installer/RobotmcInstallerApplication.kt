@@ -19,6 +19,7 @@ class RobotmcInstallerApplication
 fun main(args: Array<String>) {
     // Spring Boot는 기본으로 java.awt.headless=true 이다. 그 상태면 Compose가 창을 못 연다.
     System.setProperty("java.awt.headless", "false")
+    System.setProperty("apple.awt.application.name", "RobotMC Installer")
     val context = runApplication<RobotmcInstallerApplication>(*args)
     val properties = context.getBean(InstallerProperties::class.java)
     val progress = context.getBean(ProgressService::class.java)
@@ -41,7 +42,7 @@ fun main(args: Array<String>) {
     var exitCode = 0
     application(exitProcessOnExit = false) {
         val app = this
-        InstallerWindow(session) { code ->
+        InstallerWindow(session, properties) { code ->
             exitCode = code
             app.exitApplication()
         }
