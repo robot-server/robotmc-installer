@@ -76,6 +76,33 @@ private fun profileVersionId(
     ModLoaderType.FABRIC -> "fabric-loader-$loaderVersion-$minecraftVersion"
 }
 
+private fun neoForgeInstallerArguments(installOptions: List<String>, directory: String): List<String> {
+    val others = mutableListOf<String>()
+    var index = 0
+    while (index < installOptions.size) {
+        val option = installOptions[index]
+        if (!isNeoForgeClientOption(option)) {
+            others += option
+            index++
+            continue
+        }
+        // =값 이거나, 다음 토큰이 경로면 그 경로는 minecraft.directory 로 바꾼다.
+        if (!option.contains('=')) {
+            val next = installOptions.getOrNull(index + 1)
+            if (next != null && !next.startsWith("-")) {
+                index++
+            }
+        }
+        index++
+    }
+    return others + listOf("--install-client", directory)
+}
+
+private fun isNeoForgeClientOption(option: String): Boolean {
+    val name = option.substringBefore('=')
+    return name == "--install-client" || name == "--installClient"
+}
+
 private fun installerArguments(
     type: ModLoaderType,
     loaderVersion: String,
@@ -83,9 +110,8 @@ private fun installerArguments(
     minecraftDirectory: Path,
     installOptions: List<String>,
 ): List<String> = when (type) {
-    // --install-client 의 선택 인자. 빠지면 설치기는 OS 기본 .minecraft 에 넣고,
-    // 설치 여부 확인은 minecraft.directory 를 본다.
-    ModLoaderType.NEO_FORGE -> installOptions + minecraftDirectory.toString()
+    // 다른 옵션을 앞에 두고, --install-client 와 디렉터리를 마지막에 둔다.
+    ModLoaderType.NEO_FORGE -> neoForgeInstallerArguments(installOptions, minecraftDirectory.toString())
     // Fabric client 설치는 -dir 로 디렉터리 하나를 받는다. loader 버전은 -loader 에만 쓴다.
     ModLoaderType.FABRIC -> listOf(
         "client",

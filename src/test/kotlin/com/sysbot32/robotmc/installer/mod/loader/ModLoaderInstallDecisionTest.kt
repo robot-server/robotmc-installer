@@ -2,6 +2,7 @@ package com.sysbot32.robotmc.installer.mod.loader
 
 import com.sysbot32.robotmc.installer.launcher.LauncherProfilesJson
 import org.apache.commons.exec.ExecuteException
+import java.nio.file.Files
 import java.nio.file.Paths
 import java.time.Duration
 import kotlin.test.Test
@@ -66,6 +67,44 @@ class ModLoaderInstallDecisionTest {
     }
 
     @Test
+    fun neoForgeClientDirectoryIsAlwaysTheConfiguredDirectory() {
+        assertEquals(
+            listOf(
+                "java",
+                "-jar",
+                "neoforge-21.11.6-beta-installer.jar",
+                "--debug",
+                "--offline",
+                "--install-client",
+                "/tmp/My Minecraft/instance",
+            ),
+            neoForgeDecision(
+                profiles(),
+                installOptions = listOf("--debug", "--install-client", "--offline"),
+            ).arguments,
+        )
+        assertEquals(neoForgeCommand, neoForgeDecision(profiles(), installOptions = emptyList()).arguments)
+        assertEquals(
+            neoForgeCommand,
+            neoForgeDecision(profiles(), installOptions = listOf("--install-client=/old/minecraft")).arguments,
+        )
+        assertEquals(
+            listOf(
+                "java",
+                "-jar",
+                "neoforge-21.11.6-beta-installer.jar",
+                "--offline",
+                "--install-client",
+                "/tmp/My Minecraft/instance",
+            ),
+            neoForgeDecision(
+                profiles(),
+                installOptions = listOf("--installClient", "/already/set", "--offline"),
+            ).arguments,
+        )
+    }
+
+    @Test
     fun loaderTypesAreNeoForgeAndFabricOnly() {
         assertEquals(setOf("NEO_FORGE", "FABRIC"), ModLoaderType.entries.map { it.name }.toSet())
         assertEquals("NeoForge", ModLoaderType.NEO_FORGE.displayName)
@@ -110,13 +149,16 @@ class ModLoaderInstallDecisionTest {
         )
     }
 
-    private fun neoForgeDecision(profiles: LauncherProfilesJson): ModLoaderInstallDecision {
+    private fun neoForgeDecision(
+        profiles: LauncherProfilesJson,
+        installOptions: List<String> = listOf("--install-client"),
+    ): ModLoaderInstallDecision {
         return decideModLoaderInstall(
             type = ModLoaderType.NEO_FORGE,
             loaderVersion = "21.11.6-beta",
             minecraftVersion = "1.21.11",
             minecraftDirectory = Paths.get("/tmp/My Minecraft/instance"),
-            installOptions = listOf("--install-client"),
+            installOptions = installOptions,
             profiles = profiles,
         )
     }
@@ -164,14 +206,72 @@ class ModLoaderInstallDecisionTest {
     )
 }
 
+class ModLoaderProcessSleep {
+    companion object {
+        @JvmStatic
+        fun main(args: Array<String>) {
+            Files.writeString(Paths.get(args[0]), "started")
+            Thread.sleep(args[1].toLong())
+        }
+    }
+}
+
 class ModLoaderCommandTest {
     @Test
+    fun javaExecutableComesFromJavaHome() {
+        assertEquals(
+            "/opt/jdk/bin/java",
+            modLoaderJavaExecutable("/opt/jdk", "Mac OS X"),
+        )
+        assertEquals(
+            "/opt/jdk/bin/java",
+            modLoaderJavaExecutable("/opt/jdk/", "Linux"),
+        )
+        assertEquals(
+            "C:\\Program Files\\Java\\jdk-21\\bin\\java.exe",
+            modLoaderJavaExecutable("C:\\Program Files\\Java\\jdk-21", "Windows 11"),
+        )
+        assertEquals(
+            "/opt/jdk/bin/java",
+            modLoaderJavaExecutable("/opt/jdk", "darwin"),
+        )
+        assertEquals(
+            listOf("/opt/jdk/bin/java", "-jar", "installer.jar"),
+            modLoaderProcessCommand(listOf("java", "-jar", "installer.jar"), "/opt/jdk", "Linux"),
+        )
+        assertEquals(
+            listOf("/opt/jdk/bin/java", "30"),
+            modLoaderProcessCommand(listOf("/bin/sleep", "30"), "/opt/jdk", "darwin"),
+        )
+        val running = modLoaderJavaExecutable(System.getProperty("java.home"), System.getProperty("os.name"))
+        assertTrue(Files.isExecutable(Paths.get(running)), running)
+    }
+
+    @Test
     fun watchdogKillsAProcessThatDoesNotExit() {
+        val marker = Files.createTempFile("mod-loader-sleep", ".txt")
+        Files.delete(marker)
+        val java = modLoaderJavaExecutable(System.getProperty("java.home"), System.getProperty("os.name"))
         val started = System.nanoTime()
-        assertFailsWith<ExecuteException> {
-            executeModLoaderCommand(listOf("/bin/sleep", "30"), Duration.ofMillis(500))
+        try {
+            assertFailsWith<ExecuteException> {
+                executeModLoaderCommand(
+                    listOf(
+                        java,
+                        "-cp",
+                        System.getProperty("java.class.path"),
+                        "com.sysbot32.robotmc.installer.mod.loader.ModLoaderProcessSleep",
+                        marker.toString(),
+                        "30000",
+                    ),
+                    Duration.ofSeconds(2),
+                )
+            }
+            val elapsedMs = (System.nanoTime() - started) / 1_000_000
+            assertTrue(Files.exists(marker), "sleeper did not start")
+            assertTrue(elapsedMs < 8_000, "elapsed ${elapsedMs}ms")
+        } finally {
+            Files.deleteIfExists(marker)
         }
-        val elapsedMs = (System.nanoTime() - started) / 1_000_000
-        assertTrue(elapsedMs < 5_000, "elapsed ${elapsedMs}ms")
     }
 }
