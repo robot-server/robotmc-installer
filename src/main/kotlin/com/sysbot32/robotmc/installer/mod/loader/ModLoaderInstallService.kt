@@ -24,10 +24,32 @@ val MOD_LOADER_PROCESS_TIMEOUT: Duration = Duration.ofMinutes(30)
 fun executeModLoaderCommand(
     arguments: List<String>,
     timeout: Duration = MOD_LOADER_PROCESS_TIMEOUT,
+    javaHome: String = System.getProperty("java.home"),
+    osName: String = System.getProperty("os.name"),
 ) {
+    val command = modLoaderProcessCommand(arguments, javaHome, osName)
+    log.info { "${modLoaderCommandLine(command)}" }
     val executor = DefaultExecutor.builder().get()
     executor.watchdog = ExecuteWatchdog.builder().setTimeout(timeout).get()
-    executor.execute(modLoaderCommandLine(arguments))
+    executor.execute(modLoaderCommandLine(command))
+}
+
+/**
+ * 결정의 첫 자리는 실행 파일 자리다. 그 문자열은 보지 않고, 이 프로세스를 띄운 JVM으로 바꾼다.
+ */
+fun modLoaderProcessCommand(
+    arguments: List<String>,
+    javaHome: String = System.getProperty("java.home"),
+    osName: String = System.getProperty("os.name"),
+): List<String> {
+    return listOf(modLoaderJavaExecutable(javaHome, osName)) + arguments.drop(1)
+}
+
+fun modLoaderJavaExecutable(javaHome: String, osName: String): String {
+    val windows = osName.lowercase().startsWith("windows")
+    val separator = if (windows) "\\" else "/"
+    val fileName = if (windows) "java.exe" else "java"
+    return javaHome.trimEnd('\\', '/') + separator + "bin" + separator + fileName
 }
 
 @Service
@@ -63,7 +85,6 @@ class ModLoaderInstallService(
         }
         this.progressService.step("모드 로더 설치 중...")
         if (decision.runInstaller) {
-            log.info { "${modLoaderCommandLine(decision.arguments)}" }
             executeModLoaderCommand(decision.arguments)
         }
         this.progressService.step()
