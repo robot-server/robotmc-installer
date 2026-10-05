@@ -105,6 +105,53 @@ class InstallerSessionTest {
     }
 
     @Test
+    fun switchModeChangesTheConfirmScreen() {
+        val session = openSession(totalSteps = 4)
+
+        session.switchMode(Mode.UNINSTALL)
+
+        val removed = session.state.value
+        assertEquals(SessionPhase.Confirm, removed.phase)
+        assertEquals(Mode.UNINSTALL, removed.mode)
+        assertEquals("설치된 모드 로더 및 모드를 제거할까요?", removed.prompt)
+        assertEquals(4, removed.completedSteps)
+        assertEquals(1f, removed.fraction)
+
+        session.switchMode(Mode.INSTALL)
+
+        val installed = session.state.value
+        assertEquals(Mode.INSTALL, installed.mode)
+        assertEquals(0, installed.completedSteps)
+        assertTrue(installed.prompt.contains("설치할까요?"))
+    }
+
+    @Test
+    fun switchModeIsIgnoredWhileWorkingAndResetsAfterFinish() {
+        var runs = 0
+        lateinit var session: InstallerSession
+        session = openSession { _ ->
+            runs += 1
+            if (runs == 1) {
+                session.switchMode(Mode.UNINSTALL)
+                assertEquals(Mode.INSTALL, session.state.value.mode)
+                assertEquals(SessionPhase.Working, session.state.value.phase)
+            }
+        }
+
+        session.accept()
+        assertEquals(1, runs)
+        assertEquals(SessionPhase.Finished, session.state.value.phase)
+
+        session.switchMode(Mode.UNINSTALL)
+        assertEquals(SessionPhase.Confirm, session.state.value.phase)
+        assertEquals(Mode.UNINSTALL, session.state.value.mode)
+
+        session.accept()
+        assertEquals(2, runs)
+        assertEquals("완료됐어요.", session.state.value.message)
+    }
+
+    @Test
     fun userExceptionFinishesWithItsMessageAndExitStatus() {
         var afterThrowCount = 0
         val failure = object : UserException("런처가 없어요") {

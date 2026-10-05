@@ -44,7 +44,7 @@ data class SessionState(
  * 수락하면 [work]를 호출한 스레드에서 끝내고, 진행 보고는 [progress]로 들어온다.
  */
 class InstallerSession(
-    val mode: Mode,
+    mode: Mode,
     totalSteps: Int,
     private val progress: ProgressService,
     private val work: () -> Unit,
@@ -68,6 +68,28 @@ class InstallerSession(
 
     init {
         this.progress.attach(this)
+    }
+
+    fun switchMode(mode: Mode) {
+        val current = this.state.value
+        if (current.phase == SessionPhase.Working || current.mode == mode) {
+            return
+        }
+        this.decided.set(false)
+        this.update {
+            SessionState(
+                phase = SessionPhase.Confirm,
+                mode = mode,
+                prompt = promptFor(mode),
+                status = "",
+                statuses = emptyList(),
+                completedSteps = if (mode == Mode.UNINSTALL) it.totalSteps else 0,
+                totalSteps = it.totalSteps,
+                message = null,
+                exitCode = null,
+                declined = false,
+            )
+        }
     }
 
     fun decline() {
