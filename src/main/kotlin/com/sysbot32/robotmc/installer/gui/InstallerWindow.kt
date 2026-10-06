@@ -149,18 +149,19 @@ fun InstallerWindow(
         )
     }
     when (panel) {
-        InfoPanel.About -> AboutDialog(onClose = { panel = null })
+        InfoPanel.About -> AboutDialog(properties, onClose = { panel = null })
         InfoPanel.Settings -> SettingsDialog(properties, state.mode, onClose = { panel = null })
         null -> Unit
     }
 }
 
 @Composable
-private fun AboutDialog(onClose: () -> Unit) {
+private fun AboutDialog(properties: InstallerProperties, onClose: () -> Unit) {
+    val notice = installerUpdateNotice(properties)
     DialogWindow(
         onCloseRequest = onClose,
         title = "정보",
-        state = rememberDialogState(width = 420.dp, height = 280.dp),
+        state = rememberDialogState(width = 420.dp, height = if (notice == null) 280.dp else 360.dp),
     ) {
         InstallerSurface {
             Column(
@@ -182,6 +183,9 @@ private fun AboutDialog(onClose: () -> Unit) {
                         style = MaterialTheme.typography.bodyMedium,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
+                }
+                notice?.let { text ->
+                    Text(text, style = MaterialTheme.typography.bodyLarge)
                 }
                 Spacer(Modifier.weight(1f))
                 Button(onClick = onClose, modifier = Modifier.align(Alignment.End)) { Text("닫기") }

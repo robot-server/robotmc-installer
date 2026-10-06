@@ -1,7 +1,9 @@
 package com.sysbot32.robotmc.installer.config
 
-import com.sysbot32.robotmc.installer.startupArguments
+import com.sysbot32.robotmc.installer.gui.applicationVersion
+import com.sysbot32.robotmc.installer.gui.installerUpdateNotice
 import com.sysbot32.robotmc.installer.gui.settingsRows
+import com.sysbot32.robotmc.installer.startupArguments
 import com.sysbot32.robotmc.installer.mod.loader.ModLoaderType
 import org.junit.jupiter.api.condition.EnabledIfEnvironmentVariable
 import org.springframework.boot.SpringBootConfiguration
@@ -18,6 +20,7 @@ import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
 import kotlin.test.assertFalse
 import kotlin.test.assertNotEquals
+import kotlin.test.assertNotNull
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
@@ -265,6 +268,66 @@ class RemoteInstallerConfigTest {
     }
 
     @Test
+    fun packagedVersionIsTheGradleProjectVersion() {
+        assertEquals("1.0.0", applicationVersion())
+        assertNull(applicationVersion("/missing-installer-version.txt"))
+    }
+
+    @Test
+    fun noticeNamesBothVersionsOnlyWhenTheRemoteInstallerDiffers() {
+        val internal = checkNotNull(applicationVersion())
+        val remote = "9.9.9"
+        assertNotEquals(internal, remote)
+        val directory = Files.createTempDirectory("remote-config")
+        val seen = mutableListOf<URI>()
+        val different = resolveApp(directory.resolve("different.yml"), seen, version = remote, sha = SHA)
+        val notice = installerUpdateNotice(different)
+
+        assertNotNull(notice)
+        assertTrue(notice.contains(remote))
+        assertTrue(notice.contains(internal))
+        assertTrue(notice.contains("이에요"))
+        assertFalse(notice.contains("입니다"))
+        assertEquals(listOf(URI(MAIN_MANIFEST)), seen.toList())
+        assertEquals(emptyList(), jarsUnder(directory))
+
+        val sameSeen = mutableListOf<URI>()
+        val same = resolveApp(directory.resolve("same.yml"), sameSeen, version = internal, sha = SHA)
+        assertNull(installerUpdateNotice(same))
+        assertEquals(listOf(URI(MAIN_MANIFEST)), sameSeen)
+
+        val httpSeen = mutableListOf<URI>()
+        val http = resolveApp(
+            directory.resolve("http.yml"),
+            httpSeen,
+            version = remote,
+            sha = SHA,
+            url = "http://example.com/robotmc-installer.jar",
+        )
+        assertNull(http.pendingAppUpdate())
+        assertNull(installerUpdateNotice(http))
+        assertEquals(listOf(URI(MAIN_MANIFEST)), httpSeen)
+
+        val shortSeen = mutableListOf<URI>()
+        val shortSha = resolveApp(
+            directory.resolve("sha.yml"),
+            shortSeen,
+            version = remote,
+            sha = "abc",
+        )
+        assertNull(shortSha.pendingAppUpdate())
+        assertNull(installerUpdateNotice(shortSha))
+        assertEquals(remote, shortSha.update.app.version)
+        assertEquals("", shortSha.update.app.sha256)
+        assertEquals(listOf(URI(MAIN_MANIFEST)), shortSeen)
+
+        assertNull(installerUpdateNotice(different, internalVersion = null))
+        assertNull(installerUpdateNotice(different, internalVersion = ""))
+        assertNull(installerUpdateNotice(different, internalVersion = " "))
+        assertNull(installerUpdateNotice(different, applicationVersion("/missing-installer-version.txt")))
+    }
+
+    @Test
     fun redirectsStayOnHttps() {
         assertEquals(
             URI("https://example.com/installer.yml"),
@@ -307,6 +370,29 @@ class RemoteInstallerConfigTest {
         return Files.list(directory).use { paths ->
             paths.map { it.fileName.toString() }.filter { it.endsWith(".jar") }.toList()
         }
+    }
+
+    private fun resolveApp(
+        cache: Path,
+        seen: MutableList<URI>,
+        version: String,
+        sha: String,
+        url: String = "https://example.com/robotmc-installer.jar",
+    ): InstallerProperties {
+        val resolved = RemoteInstallerConfig.fromBundled(cache) { uri ->
+            seen += uri
+            """
+            installer:
+              minecraft:
+                version: "1.21.11"
+              update:
+                app:
+                  version: "$version"
+                  url: $url
+                  sha256: $sha
+            """.trimIndent()
+        }.resolve()
+        return bindInstaller(Files.readString(resolved!!.location))
     }
 
     private fun fetchedInstaller(yamlText: String): Map<*, *> {
