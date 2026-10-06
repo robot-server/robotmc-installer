@@ -1,0 +1,401 @@
+package com.sysbot32.robotmc.installer.config
+
+import com.sysbot32.robotmc.installer.startupArguments
+import com.sysbot32.robotmc.installer.gui.settingsRows
+import com.sysbot32.robotmc.installer.mod.loader.ModLoaderType
+import org.junit.jupiter.api.condition.EnabledIfEnvironmentVariable
+import org.springframework.boot.SpringBootConfiguration
+import org.springframework.boot.WebApplicationType
+import org.springframework.boot.builder.SpringApplicationBuilder
+import org.springframework.boot.context.properties.EnableConfigurationProperties
+import org.springframework.context.ConfigurableApplicationContext
+import org.yaml.snakeyaml.Yaml
+import java.net.URI
+import java.nio.file.Files
+import java.nio.file.Path
+import kotlin.test.Test
+import kotlin.test.assertEquals
+import kotlin.test.assertFailsWith
+import kotlin.test.assertFalse
+import kotlin.test.assertNotEquals
+import kotlin.test.assertNull
+import kotlin.test.assertTrue
+
+class RemoteInstallerConfigTest {
+    @Test
+    fun bundledManifestPointsAtMainApplicationYml() {
+        assertEquals(MAIN_MANIFEST, manifestUrl(readBundledYaml()))
+    }
+
+    @Test
+    fun startupResolveReplacesTheInstallerSectionAndDoesNotFetchTheAppJar() {
+        val directory = Files.createTempDirectory("remote-config")
+        val cache = directory.resolve("manifest.yml")
+        val seen = mutableListOf<URI>()
+        val first = RemoteInstallerConfig.fromBundled(cache) { uri ->
+            seen += uri
+            REMOTE
+        }.resolve()
+        val second = RemoteInstallerConfig.fromBundled(cache) { uri ->
+            seen += uri
+            REMOTE
+        }.resolve()
+
+        assertEquals(listOf(URI(MAIN_MANIFEST), URI(MAIN_MANIFEST)), seen)
+        assertEquals(RemoteInstallerConfig.SOURCE_ONLINE, first?.source)
+        assertEquals(RemoteInstallerConfig.SOURCE_ONLINE, second?.source)
+        assertEquals(emptyList(), jarsUnder(directory))
+        val bundled = bindInstaller(readBundledYaml())
+        withStartup(first!!) { context ->
+            val properties = context.getBean(InstallerProperties::class.java)
+            assertEquals("1.21.12", properties.minecraft.version)
+            assertEquals(ModLoaderType.FABRIC, properties.mod?.loader?.type)
+            assertEquals("0.16.0", properties.mod?.loader?.version)
+            assertEquals(listOf("https://cdn.modrinth.com/data/only/one.jar"), properties.mod?.mods?.map { it.downloadUrl })
+            assertNotEquals(bundled.mod?.mods?.map { it.downloadUrl }, properties.mod?.mods?.map { it.downloadUrl })
+            assertTrue(bundled.servers.isNotEmpty())
+            assertEquals(emptyList(), properties.servers)
+            assertTrue(bundled.resourcePacks.isNotEmpty())
+            assertEquals(emptyList(), properties.resourcePacks)
+            assertEquals(MAIN_MANIFEST, properties.update.manifestUrl)
+            assertEquals("1.2.0", properties.pendingAppUpdate()?.version)
+            assertEquals("https://example.com/robotmc-installer.jar", properties.pendingAppUpdate()?.url)
+            assertEquals("온라인", properties.settingsRows().first { it.label == "구성" }.value)
+            assertEquals("none", context.environment.getProperty("spring.main.web-application-type"))
+            assertNotEquals("off", context.environment.getProperty("spring.main.banner-mode"))
+        }
+        val text = Files.readString(cache)
+        assertFalse(text.contains("banner-mode"))
+        assertFalse(text.contains("evil.example"))
+    }
+
+    @Test
+    fun mainShapedDocumentWithoutUpdateReplacesBundledLists() {
+        val directory = Files.createTempDirectory("remote-config")
+        val cache = directory.resolve("manifest.yml")
+        val resolved = RemoteInstallerConfig.fromBundled(cache) { _ -> MAIN_SHAPE }.resolve()
+        val bundled = bindInstaller(readBundledYaml())
+
+        withStartup(resolved!!) { context ->
+            val properties = context.getBean(InstallerProperties::class.java)
+            assertEquals("1.21.11", properties.minecraft.version)
+            assertEquals("21.11.7-beta", properties.mod?.loader?.version)
+            assertEquals(listOf("https://example.com/from-main-shape.jar"), properties.mod?.mods?.map { it.downloadUrl })
+            assertNotEquals(bundled.mod?.mods?.map { it.downloadUrl }, properties.mod?.mods?.map { it.downloadUrl })
+            assertEquals(listOf("Other Server"), properties.servers.map { it.name })
+            assertNotEquals(bundled.servers.map { it.name }, properties.servers.map { it.name })
+            assertEquals(listOf("https://example.com/pack-from-main.zip"), properties.resourcePacks.map { it.downloadUrl })
+            assertEquals(MAIN_MANIFEST, properties.update.manifestUrl)
+            assertNull(properties.pendingAppUpdate())
+            assertEquals("none", context.environment.getProperty("spring.main.web-application-type"))
+        }
+    }
+
+    @Test
+    fun incompleteAppFieldsAreNotAnUpdateCandidate() {
+        val directory = Files.createTempDirectory("remote-config")
+        val seen = mutableListOf<URI>()
+        val resolved = RemoteInstallerConfig.fromBundled(directory.resolve("manifest.yml")) { uri ->
+            seen += uri
+            """
+            installer:
+              minecraft:
+                version: "1.21.12"
+              update:
+                app:
+                  version: "1.2.0"
+                  url: http://example.com/robotmc-installer.jar
+                  sha256: abc
+            """.trimIndent()
+        }.resolve()
+        val properties = bindInstaller(Files.readString(resolved!!.location))
+
+        assertEquals(listOf(URI(MAIN_MANIFEST)), seen)
+        assertNull(properties.pendingAppUpdate())
+        assertEquals("", properties.update.app.url)
+        assertEquals("", properties.update.app.sha256)
+        assertEquals("1.2.0", properties.update.app.version)
+        assertEquals(emptyList(), jarsUnder(directory))
+    }
+
+    @Test
+    fun blankUrlIgnoresTheCache() {
+        val directory = Files.createTempDirectory("remote-config")
+        val cache = directory.resolve("manifest.yml")
+        Files.writeString(cache, "kept")
+        val resolved = RemoteInstallerConfig(
+            manifestUrl = "  ",
+            bundledYaml = readBundledYaml(),
+            cacheFile = cache,
+            fetch = { _ -> error("fetch should not run") },
+        ).resolve()
+
+        assertNull(resolved)
+        assertEquals("kept", Files.readString(cache))
+    }
+
+    @Test
+    fun httpUrlDoesNotFetchAndUsesAValidCache() {
+        val directory = Files.createTempDirectory("remote-config")
+        val cache = directory.resolve("manifest.yml")
+        RemoteInstallerConfig.fromBundled(cache) { _ -> REMOTE }.resolve()
+        val before = Files.readString(cache)
+        val resolved = config(cache, "http://example.com/installer.yml") { _ -> error("fetch should not run") }.resolve()
+
+        assertEquals(RemoteInstallerConfig.SOURCE_CACHE, resolved?.source)
+        assertEquals(before, Files.readString(cache))
+        assertEquals("1.21.12", bindInstaller(before).minecraft.version)
+    }
+
+    @Test
+    fun failedFetchKeepsThePreviousCacheForTheNextLaunch() {
+        val directory = Files.createTempDirectory("remote-config")
+        val cache = directory.resolve("manifest.yml")
+        RemoteInstallerConfig.fromBundled(cache) { _ -> REMOTE }.resolve()
+        val before = Files.readString(cache)
+        val resolved = RemoteInstallerConfig.fromBundled(cache) { _ ->
+            throw IllegalStateException("offline")
+        }.resolve()
+
+        assertEquals(RemoteInstallerConfig.SOURCE_CACHE, resolved?.source)
+        assertEquals(before, Files.readString(cache))
+        withStartup(resolved!!) { context ->
+            val properties = context.getBean(InstallerProperties::class.java)
+            assertEquals(listOf("https://cdn.modrinth.com/data/only/one.jar"), properties.mod?.mods?.map { it.downloadUrl })
+            assertEquals("저장된 온라인 구성", properties.settingsRows().first { it.label == "구성" }.value)
+        }
+    }
+
+    @Test
+    fun invalidManifestDoesNotReplaceTheCache() {
+        val directory = Files.createTempDirectory("remote-config")
+        val cache = directory.resolve("manifest.yml")
+        RemoteInstallerConfig.fromBundled(cache) { _ -> REMOTE }.resolve()
+        val before = Files.readString(cache)
+        val unresolved = RemoteInstallerConfig.fromBundled(cache) { _ ->
+            "installer: { minecraft: { } }"
+        }.resolve()
+        val unbound = RemoteInstallerConfig.fromBundled(cache) { _ ->
+            UNBINDABLE
+        }.resolve()
+
+        assertEquals(RemoteInstallerConfig.SOURCE_CACHE, unresolved?.source)
+        assertEquals(RemoteInstallerConfig.SOURCE_CACHE, unbound?.source)
+        assertEquals(before, Files.readString(cache))
+    }
+
+    @Test
+    fun missingCacheAfterFailureUsesTheBundledConfig() {
+        val directory = Files.createTempDirectory("remote-config")
+        val resolved = config(directory.resolve("manifest.yml"), "https://example.com/installer.yml") { _ ->
+            throw IllegalStateException("offline")
+        }.resolve()
+
+        assertNull(resolved)
+        assertEquals("설치 파일", bindInstaller(readBundledYaml()).settingsRows().first { it.label == "구성" }.value)
+    }
+
+    @Test
+    fun configArgumentsPointSpringAtTheCache() {
+        val location = Files.createTempDirectory("remote-config").resolve("manifest.yml")
+        val arguments = RemoteInstallerConfig.Resolved(location, RemoteInstallerConfig.SOURCE_ONLINE).arguments()
+
+        assertEquals(
+            arrayOf(
+                "--spring.config.location=optional:${location.toUri()}",
+                "--installer.update.source=online",
+            ).toList(),
+            arguments.toList(),
+        )
+        val resolved = RemoteInstallerConfig.Resolved(location, RemoteInstallerConfig.SOURCE_ONLINE)
+        assertEquals(listOf("--nogui") + arguments.toList(), startupArguments(arrayOf("--nogui"), resolved).toList())
+        assertEquals(listOf("--nogui"), startupArguments(arrayOf("--nogui"), null).toList())
+    }
+
+    @Test
+    @EnabledIfEnvironmentVariable(named = "ROBOTMC_LIVE_OUT", matches = ".+")
+    fun liveResolveTwiceMatchesTheFetchedInstallerSection() {
+        val report = Path.of(System.getenv("ROBOTMC_LIVE_OUT"))
+        val directory = Files.createTempDirectory("live-resolve")
+        val lines = mutableListOf<String>()
+        try {
+            repeat(2) { index ->
+                var body = ""
+                var failure: Exception? = null
+                val resolved = RemoteInstallerConfig.fromBundled(directory.resolve("run-$index.yml")) { uri ->
+                    try {
+                        RemoteInstallerConfig.fetchHttps(uri).also { body = it }
+                    } catch (exception: Exception) {
+                        failure = exception
+                        throw exception
+                    }
+                }.resolve()
+                val error = failure
+                if (error != null) {
+                    lines += "run ${index + 1}: network failure: ${error::class.java.name}: ${error.message}"
+                    return@repeat
+                }
+                check(resolved != null) { "run ${index + 1} did not resolve" }
+                check(resolved.source == RemoteInstallerConfig.SOURCE_ONLINE) {
+                    "run ${index + 1} source was ${resolved.source}"
+                }
+                val bound = bindInstaller(Files.readString(resolved.location))
+                val section = fetchedInstaller(body)
+                val fetchedVersion = (section["minecraft"] as Map<*, *>)["version"].toString()
+                val fetchedMods = downloadUrls(section["mod"] as Map<*, *>, "mods")
+                val boundMods = bound.mod?.mods?.map { it.downloadUrl }.orEmpty()
+                lines += "run ${index + 1}: source=${resolved.source} version=$fetchedVersion mods=$fetchedMods"
+                check(bound.minecraft.version == fetchedVersion) {
+                    "run ${index + 1} version ${bound.minecraft.version} != $fetchedVersion"
+                }
+                check(boundMods == fetchedMods) {
+                    "run ${index + 1} mods $boundMods != $fetchedMods"
+                }
+            }
+        } catch (exception: Exception) {
+            lines += "error: ${exception::class.java.name}: ${exception.message}"
+            Files.writeString(report, lines.joinToString("\n"))
+            throw exception
+        }
+        Files.writeString(report, lines.joinToString("\n"))
+        if (lines.any { it.contains("network failure:") }) {
+            return
+        }
+        assertEquals(2, lines.count { it.contains("source=online") })
+    }
+
+    @Test
+    fun redirectsStayOnHttps() {
+        assertEquals(
+            URI("https://example.com/installer.yml"),
+            httpsRedirect(URI("https://example.com/old.yml"), "/installer.yml"),
+        )
+        assertFailsWith<IllegalArgumentException> {
+            httpsRedirect(URI("https://example.com/old.yml"), "http://example.com/installer.yml")
+        }
+    }
+
+    @Test
+    fun fetchHttpsRejectsHttp() {
+        assertFailsWith<IllegalArgumentException> {
+            RemoteInstallerConfig.fetchHttps(URI("http://example.com/installer.yml"))
+        }
+    }
+
+    @Test
+    fun readLimitedRejectsALargeBody() {
+        val max = 8
+        assertFailsWith<IllegalArgumentException> {
+            readLimited("123456789".byteInputStream(), max)
+        }
+        assertEquals("12345678", readLimited("12345678".byteInputStream(), max))
+    }
+
+    private fun withStartup(resolved: RemoteInstallerConfig.Resolved, check: (ConfigurableApplicationContext) -> Unit) {
+        val context = SpringApplicationBuilder(RemoteInstallerConfigTestApplication::class.java)
+            .web(WebApplicationType.NONE)
+            .registerShutdownHook(false)
+            .run(*startupArguments(emptyArray(), resolved))
+        try {
+            check(context)
+        } finally {
+            context.close()
+        }
+    }
+
+    private fun jarsUnder(directory: Path): List<String> {
+        return Files.list(directory).use { paths ->
+            paths.map { it.fileName.toString() }.filter { it.endsWith(".jar") }.toList()
+        }
+    }
+
+    private fun fetchedInstaller(yamlText: String): Map<*, *> {
+        val root = Yaml().load<Map<*, *>>(yamlText)
+        return root["installer"] as Map<*, *>
+    }
+
+    private fun downloadUrls(parent: Map<*, *>, key: String): List<String> {
+        val items = parent[key] as? List<*> ?: return emptyList()
+        return items.map { (it as Map<*, *>)["download-url"].toString() }
+    }
+
+    private fun config(
+        cache: Path,
+        url: String,
+        fetch: (URI) -> String,
+    ): RemoteInstallerConfig {
+        return RemoteInstallerConfig(
+            manifestUrl = url,
+            bundledYaml = readBundledYaml(),
+            cacheFile = cache,
+            fetch = fetch,
+        )
+    }
+}
+
+private const val MAIN_MANIFEST =
+    "https://raw.githubusercontent.com/robot-server/robotmc-installer/refs/heads/main/src/main/resources/application.yml"
+
+private const val SHA = "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"
+
+private const val UNBINDABLE = """
+installer:
+  minecraft:
+    version: "1.21.11"
+  mod:
+    loader:
+      type: not_a_loader
+      version: "1"
+"""
+
+private const val MAIN_SHAPE = """
+spring:
+  application:
+    name: robotmc-installer
+  main:
+    web-application-type: servlet
+installer:
+  minecraft:
+    version: "1.21.11"
+  mod:
+    loader:
+      type: neo_forge
+      version: 21.11.7-beta
+      install-options:
+        - '--install-client'
+    mods:
+      - download-url: 'https://example.com/from-main-shape.jar'
+  servers:
+    - ip: minecraft.o-r.cc
+      name: Other Server
+  resource-packs:
+    - download-url: 'https://example.com/pack-from-main.zip'
+"""
+
+private const val REMOTE = """
+installer:
+  update:
+    manifest-url: https://evil.example/other.yml
+    source: forged
+    app:
+      version: "1.2.0"
+      url: https://example.com/robotmc-installer.jar
+      sha256: $SHA
+  minecraft:
+    version: "1.21.12"
+  mod:
+    loader:
+      type: fabric
+      version: "0.16.0"
+    mods:
+      - download-url: https://cdn.modrinth.com/data/only/one.jar
+  servers: []
+  resource-packs: []
+spring:
+  main:
+    banner-mode: "off"
+"""
+
+@SpringBootConfiguration
+@EnableConfigurationProperties(InstallerProperties::class)
+class RemoteInstallerConfigTestApplication

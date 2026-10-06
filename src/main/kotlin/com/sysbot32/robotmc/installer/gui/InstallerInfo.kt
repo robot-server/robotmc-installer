@@ -1,6 +1,7 @@
 package com.sysbot32.robotmc.installer.gui
 
 import com.sysbot32.robotmc.installer.config.InstallerProperties
+import com.sysbot32.robotmc.installer.config.RemoteInstallerConfig
 import java.awt.Desktop
 import java.awt.EventQueue
 
@@ -40,6 +41,7 @@ fun InstallerProperties.plan(mode: InstallerProperties.Mode = this.mode): List<P
 
 fun InstallerProperties.settingsRows(mode: InstallerProperties.Mode = this.mode): List<SettingsRow> {
     val rows = mutableListOf(
+        SettingsRow("구성", configSourceLabel(this.update.source)),
         SettingsRow(
             "동작",
             when (mode) {
@@ -63,6 +65,14 @@ fun InstallerProperties.settingsRows(mode: InstallerProperties.Mode = this.mode)
         rows += SettingsRow("리소스 팩", downloadFileName(pack.downloadUrl))
     }
     return rows
+}
+
+private fun configSourceLabel(source: String): String {
+    return when (source) {
+        RemoteInstallerConfig.SOURCE_ONLINE -> "온라인"
+        RemoteInstallerConfig.SOURCE_CACHE -> "저장된 온라인 구성"
+        else -> "설치 파일"
+    }
 }
 
 private fun loaderLabel(loader: InstallerProperties.Mod.Loader): String {
