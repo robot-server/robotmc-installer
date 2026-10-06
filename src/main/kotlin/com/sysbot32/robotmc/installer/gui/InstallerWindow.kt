@@ -78,10 +78,11 @@ fun InstallerWindow(
     var applicationMenu by remember { mutableStateOf(false) }
     var menuReady by remember { mutableStateOf(false) }
     var showPlan by remember { mutableStateOf(false) }
+    val updateNotice = installerUpdateNotice(properties)
     val windowState = rememberWindowState(
         position = WindowPosition(Alignment.Center),
         width = 520.dp,
-        height = 420.dp,
+        height = if (updateNotice == null) 420.dp else 500.dp,
     )
     val detailsOpen = showPlan && state.phase == SessionPhase.Confirm
     Window(
@@ -98,8 +99,8 @@ fun InstallerWindow(
         title = windowTitle(state),
         state = windowState,
     ) {
-        LaunchedEffect(detailsOpen) {
-            val height = windowHeight(detailsOpen, window)
+        LaunchedEffect(detailsOpen, updateNotice != null) {
+            val height = windowHeight(detailsOpen, updateNotice != null, window)
             windowState.size = DpSize(520.dp, height)
             moveInsideScreen(windowState, window)
         }
@@ -144,6 +145,7 @@ fun InstallerWindow(
             properties = properties,
             state = state,
             showPlan = showPlan,
+            updateNotice = updateNotice,
             onTogglePlan = { showPlan = !showPlan },
             onExit = onExit,
         )
@@ -252,6 +254,7 @@ private fun InstallerScreen(
     properties: InstallerProperties,
     state: SessionState,
     showPlan: Boolean,
+    updateNotice: String?,
     onTogglePlan: () -> Unit,
     onExit: (Int) -> Unit,
 ) {
@@ -271,6 +274,7 @@ private fun InstallerScreen(
                     state = state,
                     properties = properties,
                     showPlan = showPlan,
+                    updateNotice = updateNotice,
                     onTogglePlan = onTogglePlan,
                     modifier = Modifier.weight(1f),
                     onDecline = {
@@ -297,6 +301,7 @@ private fun ColumnScope.ConfirmPhase(
     state: SessionState,
     properties: InstallerProperties,
     showPlan: Boolean,
+    updateNotice: String?,
     onTogglePlan: () -> Unit,
     modifier: Modifier,
     onDecline: () -> Unit,
@@ -305,6 +310,9 @@ private fun ColumnScope.ConfirmPhase(
     Column(modifier = modifier, verticalArrangement = Arrangement.spacedBy(16.dp)) {
         Text(InstallerSession.actionLabel(state.mode), style = MaterialTheme.typography.headlineMedium)
         Text(state.prompt, style = MaterialTheme.typography.bodyLarge)
+        updateNotice?.let { notice ->
+            Text(notice, style = MaterialTheme.typography.bodyLarge, color = MaterialTheme.colorScheme.primary)
+        }
         Text(
             "Minecraft ${properties.minecraft.version}",
             style = MaterialTheme.typography.labelLarge,
@@ -410,11 +418,15 @@ private fun ColumnScope.FinishedPhase(
     }
 }
 
-private fun windowHeight(detailsOpen: Boolean, window: AwtWindow): Dp {
+private fun windowHeight(detailsOpen: Boolean, updateNotice: Boolean, window: AwtWindow): Dp {
     val config = window.graphicsConfiguration
     val insets = Toolkit.getDefaultToolkit().getScreenInsets(config)
     val usable = (config.bounds.height - insets.top - insets.bottom).coerceAtLeast(1)
-    val desired = if (detailsOpen) 720 else 420
+    val desired = when {
+        detailsOpen -> 720
+        updateNotice -> 500
+        else -> 420
+    }
     return minOf(desired, usable).dp
 }
 
