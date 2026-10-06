@@ -79,6 +79,7 @@ fun InstallerWindow(
     var menuReady by remember { mutableStateOf(false) }
     var showPlan by remember { mutableStateOf(false) }
     val updateNotice = installerUpdateNotice(properties)
+    var showUpdateAlert by remember { mutableStateOf(updateNotice != null) }
     val windowState = rememberWindowState(
         position = WindowPosition(Alignment.Center),
         width = 520.dp,
@@ -154,6 +155,32 @@ fun InstallerWindow(
         InfoPanel.About -> AboutDialog(properties, onClose = { panel = null })
         InfoPanel.Settings -> SettingsDialog(properties, state.mode, onClose = { panel = null })
         null -> Unit
+    }
+    if (showUpdateAlert && updateNotice != null) {
+        UpdateAlertDialog(updateNotice, onClose = { showUpdateAlert = false })
+    }
+}
+
+@Composable
+private fun UpdateAlertDialog(notice: String, onClose: () -> Unit) {
+    DialogWindow(
+        onCloseRequest = onClose,
+        title = "설치기 업데이트",
+        state = rememberDialogState(position = WindowPosition(Alignment.Center), width = 440.dp, height = 320.dp),
+        resizable = false,
+        alwaysOnTop = true,
+    ) {
+        InstallerSurface {
+            Column(
+                modifier = Modifier.fillMaxSize().padding(28.dp),
+                verticalArrangement = Arrangement.spacedBy(16.dp),
+            ) {
+                Text("설치기 업데이트", style = MaterialTheme.typography.headlineMedium)
+                Text(notice, style = MaterialTheme.typography.bodyLarge)
+                Spacer(Modifier.weight(1f))
+                Button(onClick = onClose, modifier = Modifier.align(Alignment.End)) { Text("확인") }
+            }
+        }
     }
 }
 
