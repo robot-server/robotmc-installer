@@ -5,14 +5,52 @@ import com.sysbot32.robotmc.installer.config.InstallerProperties
 import com.sysbot32.robotmc.installer.launcher.LauncherService
 import com.sysbot32.robotmc.installer.progress.ProgressService
 import io.github.oshai.kotlinlogging.KotlinLogging
-import org.apache.commons.exec.CommandLine
 import org.apache.commons.exec.DefaultExecutor
+import org.apache.commons.exec.ExecuteWatchdog
 import org.springframework.stereotype.Service
 import org.springframework.web.client.RestClient
 import java.nio.file.Files
 import java.nio.file.Paths
+import java.time.Duration
 
 private val log = KotlinLogging.logger { }
+
+/**
+ * 설치기가 라이브러리를 받는 동안 끝날 수 있게 여유를 둔다.
+ * 이 시간이 지나도 프로세스가 살아 있으면 watchdog가 끝낸다.
+ */
+val MOD_LOADER_PROCESS_TIMEOUT: Duration = Duration.ofMinutes(30)
+
+fun executeModLoaderCommand(
+    arguments: List<String>,
+    timeout: Duration = MOD_LOADER_PROCESS_TIMEOUT,
+    javaHome: String = System.getProperty("java.home"),
+    osName: String = System.getProperty("os.name"),
+) {
+    val command = modLoaderProcessCommand(arguments, javaHome, osName)
+    log.info { "${modLoaderCommandLine(command)}" }
+    val executor = DefaultExecutor.builder().get()
+    executor.watchdog = ExecuteWatchdog.builder().setTimeout(timeout).get()
+    executor.execute(modLoaderCommandLine(command))
+}
+
+/**
+ * 결정의 첫 자리는 실행 파일 자리다. 그 문자열은 보지 않고, 이 프로세스를 띄운 JVM으로 바꾼다.
+ */
+fun modLoaderProcessCommand(
+    arguments: List<String>,
+    javaHome: String = System.getProperty("java.home"),
+    osName: String = System.getProperty("os.name"),
+): List<String> {
+    return listOf(modLoaderJavaExecutable(javaHome, osName)) + arguments.drop(1)
+}
+
+fun modLoaderJavaExecutable(javaHome: String, osName: String): String {
+    val windows = osName.lowercase().startsWith("windows")
+    val separator = if (windows) "\\" else "/"
+    val fileName = if (windows) "java.exe" else "java"
+    return javaHome.trimEnd('\\', '/') + separator + "bin" + separator + fileName
+}
 
 @Service
 class ModLoaderInstallService(
@@ -25,35 +63,29 @@ class ModLoaderInstallService(
         get() = 10
 
     override fun install() {
-        log.info { "Minecraft ${installerProperties.minecraft.version}" }
-        log.info { "${installerProperties.mod?.loader?.type?.displayName} ${installerProperties.mod?.loader?.version}" }
-        val installerUrl = when (installerProperties.mod?.loader?.type) {
-            ModLoaderType.NEO_FORGE -> "https://maven.neoforged.net/releases/net/neoforged/neoforge/${installerProperties.mod.loader.version}/neoforge-${installerProperties.mod.loader.version}-installer.jar"
-            ModLoaderType.FABRIC -> "https://maven.fabricmc.net/net/fabricmc/fabric-installer/1.0.3/fabric-installer-1.0.3.jar"
-            else -> throw IllegalArgumentException("Unsupported mod loader type ${installerProperties.mod?.loader?.type}")
-        }
-        val installerPath = Paths.get(installerUrl.split("/").last())
+        val loader = this.installerProperties.mod?.loader
+        log.info { "Minecraft ${this.installerProperties.minecraft.version}" }
+        log.info { "${loader?.type?.displayName} ${loader?.version}" }
+        val decision = decideModLoaderInstall(
+            type = loader?.type,
+            loaderVersion = loader?.version,
+            minecraftVersion = this.installerProperties.minecraft.version,
+            minecraftDirectory = this.installerProperties.minecraft.directory,
+            installOptions = loader?.installOptions.orEmpty(),
+            profiles = this.launcherService.getProfiles(),
+        )
+        val installerPath = Paths.get(decision.installerUrl.substringAfterLast('/'))
         if (!Files.exists(installerPath)) {
             this.progressService.setStatus("모드 로더 설치 프로그램 다운로드 중...")
             this.restClient.get()
-                .uri(installerUrl)
+                .uri(decision.installerUrl)
                 .retrieve()
                 .toEntity(ByteArray::class.java)
                 .body?.let { Files.write(installerPath, it) }
         }
         this.progressService.step("모드 로더 설치 중...")
-
-        val lastVersionId = when (installerProperties.mod.loader.type) {
-            ModLoaderType.NEO_FORGE -> "${installerProperties.mod.loader.type.displayName.lowercase()}-${installerProperties.mod.loader.version}"
-            else -> throw IllegalArgumentException("Unsupported mod loader type ${installerProperties.mod.loader.type}")
-        }
-        if (this.launcherService.getProfiles().profiles.values.find { it.lastVersionId == lastVersionId } == null) {
-            DefaultExecutor.builder().get().run {
-                execute(
-                    CommandLine.parse(
-                        "java -jar $installerPath ${installerProperties.mod.loader.installOptions.joinToString(" ")}"
-                    ).also { log.info { "$it" } })
-            }
+        if (decision.runInstaller) {
+            executeModLoaderCommand(decision.arguments)
         }
         this.progressService.step()
     }
