@@ -1,6 +1,7 @@
 package com.sysbot32.robotmc.installer.gui
 
 import com.sysbot32.robotmc.installer.config.InstallerProperties
+import com.sysbot32.robotmc.installer.config.RemoteInstallerConfig
 import com.sysbot32.robotmc.installer.mod.loader.ModLoaderType
 import com.sysbot32.robotmc.installer.server.ServersDat
 import java.nio.file.Paths
@@ -14,6 +15,7 @@ class InstallerInfoTest {
 
         assertEquals(
             listOf(
+                SettingsRow("구성", "설치 파일"),
                 SettingsRow("동작", "설치"),
                 SettingsRow("Minecraft", "1.21.11"),
                 SettingsRow("폴더", Paths.get("/tmp/minecraft").toString()),
@@ -23,6 +25,18 @@ class InstallerInfoTest {
                 SettingsRow("리소스 팩", "Faithful.zip"),
             ),
             properties.settingsRows(),
+        )
+    }
+
+    @Test
+    fun settingsRowsNameTheConfigSource() {
+        assertEquals(
+            "온라인",
+            sampleProperties(source = RemoteInstallerConfig.SOURCE_ONLINE).settingsRows().first { it.label == "구성" }.value,
+        )
+        assertEquals(
+            "저장된 온라인 구성",
+            sampleProperties(source = RemoteInstallerConfig.SOURCE_CACHE).settingsRows().first { it.label == "구성" }.value,
         )
     }
 
@@ -49,9 +63,10 @@ class InstallerInfoTest {
         )
     }
 
-    private fun sampleProperties(): InstallerProperties {
+    private fun sampleProperties(source: String = ""): InstallerProperties {
         return InstallerProperties(
             mode = InstallerProperties.Mode.INSTALL,
+            update = InstallerProperties.Update(source = source),
             minecraft = InstallerProperties.Minecraft(
                 version = "1.21.11",
                 directory = Paths.get("/tmp/minecraft"),

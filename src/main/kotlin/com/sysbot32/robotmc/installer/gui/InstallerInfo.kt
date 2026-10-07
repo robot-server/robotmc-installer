@@ -1,6 +1,8 @@
 package com.sysbot32.robotmc.installer.gui
 
 import com.sysbot32.robotmc.installer.config.InstallerProperties
+import com.sysbot32.robotmc.installer.config.RemoteInstallerConfig
+import com.sysbot32.robotmc.installer.config.pendingAppUpdate
 import java.awt.Desktop
 import java.awt.EventQueue
 
@@ -40,6 +42,7 @@ fun InstallerProperties.plan(mode: InstallerProperties.Mode = this.mode): List<P
 
 fun InstallerProperties.settingsRows(mode: InstallerProperties.Mode = this.mode): List<SettingsRow> {
     val rows = mutableListOf(
+        SettingsRow("구성", configSourceLabel(this.update.source)),
         SettingsRow(
             "동작",
             when (mode) {
@@ -65,6 +68,14 @@ fun InstallerProperties.settingsRows(mode: InstallerProperties.Mode = this.mode)
     return rows
 }
 
+private fun configSourceLabel(source: String): String {
+    return when (source) {
+        RemoteInstallerConfig.SOURCE_ONLINE -> "온라인"
+        RemoteInstallerConfig.SOURCE_CACHE -> "저장된 온라인 구성"
+        else -> "설치 파일"
+    }
+}
+
 private fun loaderLabel(loader: InstallerProperties.Mod.Loader): String {
     val version = loader.version?.let { " $it" }.orEmpty()
     return loader.type.displayName + version
@@ -74,9 +85,32 @@ private fun downloadFileName(url: String): String = url.substringAfterLast('/')
 
 private fun serverLabel(name: String, ip: String): String = "$name ($ip)"
 
-fun applicationVersion(): String? {
-    return InstallerInfo::class.java.`package`?.implementationVersion?.takeIf { it.isNotBlank() }
+/**
+ * 설치기에 들어 있는 버전. Gradle project version 을 클래스패스 리소스로 읽는다.
+ * 리소스가 없으면 null 이다.
+ */
+fun applicationVersion(resource: String = INSTALLER_VERSION_RESOURCE): String? {
+    val stream = InstallerInfo::class.java.getResourceAsStream(resource) ?: return null
+    return stream.use { it.readBytes().decodeToString() }.trim().takeIf { it.isNotBlank() }
 }
+
+/**
+ * 원격 설치기 버전이 내부 버전과 다를 때만 안내한다.
+ * 후보가 아니거나 내부 버전이 비어 있으면 null 이다. JAR 는 받지 않는다.
+ */
+fun installerUpdateNotice(
+    properties: InstallerProperties,
+    internalVersion: String? = applicationVersion(),
+): String? {
+    val remote = properties.pendingAppUpdate()?.version ?: return null
+    val internal = internalVersion?.trim().orEmpty()
+    if (internal.isBlank() || remote == internal) {
+        return null
+    }
+    return "원격 설치기 버전은 ${remote}이에요. 지금 버전은 ${internal}이에요."
+}
+
+private const val INSTALLER_VERSION_RESOURCE = "/installer-version.txt"
 
 /**
  * macOS 애플리케이션 메뉴의 정보·설정. 지원하지 않으면 false.

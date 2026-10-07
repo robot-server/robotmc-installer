@@ -5,6 +5,10 @@ spring:
     web-application-type: none
 
 installer:
+  update:
+    # https 면 시작 시 원격 YAML로 installer 구성을 바꾼다. 비어 있으면 이 파일을 쓴다.
+    # 원격 파일의 manifest-url 은 무시한다. update.app(version, url, sha256)은 설치기 교체용으로 읽어 두기만 한다.
+    manifest-url: 'https://raw.githubusercontent.com/robot-server/robotmc-installer/refs/heads/main/src/main/resources/application.yml'
   minecraft:
     version: 1.21.11
   mod:

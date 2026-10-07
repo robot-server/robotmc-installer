@@ -85,6 +85,22 @@ tasks.named<org.springframework.boot.gradle.tasks.bundling.BootJar>("bootJar") {
     }
 }
 
+// Package.implementationVersion 은 테스트의 디렉터리 클래스패스와 bootJar 의 BOOT-INF/classes 에서 비어 있다.
+val generateInstallerVersion = tasks.register("generateInstallerVersion") {
+    val outputDir = layout.buildDirectory.dir("generated/installer-version")
+    inputs.property("version", project.version.toString())
+    outputs.dir(outputDir)
+    doLast {
+        val dir = outputDir.get().asFile
+        dir.mkdirs()
+        dir.resolve("installer-version.txt").writeText(project.version.toString())
+    }
+}
+
+sourceSets.named("main") {
+    resources.srcDir(generateInstallerVersion)
+}
+
 tasks.named<Jar>("jar") {
     manifest {
         attributes(

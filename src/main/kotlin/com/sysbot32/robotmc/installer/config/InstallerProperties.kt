@@ -13,6 +13,7 @@ data class InstallerProperties(
     val mod: Mod?,
     val servers: List<ServersDat.Server> = listOf(),
     val resourcePacks: List<ResourcePack> = listOf(),
+    val update: Update = Update(),
 ) {
     enum class Mode {
         INSTALL,
@@ -54,4 +55,31 @@ data class InstallerProperties(
     data class ResourcePack(
         val downloadUrl: String,
     )
+
+    data class Update(
+        val manifestUrl: String = "",
+        val source: String = "",
+        /**
+         * 원격 구성이 설치기 교체 정보를 실어 보내는 자리.
+         * 값은 읽어 두기만 하고 JAR는 바꾸지 않는다.
+         */
+        val app: App = App(),
+    ) {
+        data class App(
+            val version: String = "",
+            val url: String = "",
+            val sha256: String = "",
+        )
+    }
+}
+
+/**
+ * version, url, sha256 이 모두 있을 때만 설치기 교체 후보로 본다.
+ */
+fun InstallerProperties.pendingAppUpdate(): InstallerProperties.Update.App? {
+    val app = this.update.app
+    if (app.version.isBlank() || app.url.isBlank() || app.sha256.isBlank()) {
+        return null
+    }
+    return app
 }

@@ -21,5 +21,8 @@ class InstallerConfig(
         log.info { "Java Runtime Version: ${Runtime.version()}" }
 
         log.info { this.installerProperties }
+        this.installerProperties.pendingAppUpdate()?.let { app ->
+            log.info { "Installer update ${app.version} is listed and is not applied" }
+        }
     }
 }

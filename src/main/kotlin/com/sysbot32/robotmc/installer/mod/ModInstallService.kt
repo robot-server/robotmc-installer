@@ -1,14 +1,17 @@
 package com.sysbot32.robotmc.installer.mod
 
 import com.sysbot32.robotmc.installer.InstallService
+import com.sysbot32.robotmc.installer.config.InstalledRecord
 import com.sysbot32.robotmc.installer.config.InstallerProperties
+import com.sysbot32.robotmc.installer.config.configFileName
+import com.sysbot32.robotmc.installer.config.deleteInstalledFile
+import com.sysbot32.robotmc.installer.config.uninstallFileNames
 import com.sysbot32.robotmc.installer.progress.ProgressService
 import io.github.oshai.kotlinlogging.KotlinLogging
 import org.springframework.stereotype.Service
 import org.springframework.web.client.RestClient
 import java.nio.file.Files
 import kotlin.io.path.createDirectory
-import kotlin.io.path.deleteIfExists
 import kotlin.io.path.name
 
 private val log = KotlinLogging.logger { }
@@ -43,7 +46,7 @@ class ModInstallService(
         }
 
         for (mod in installerProperties.mod?.mods ?: listOf()) {
-            val fileName = mod.downloadUrl.split("/").last()
+            val fileName = configFileName(mod.downloadUrl)
             this.progressService.setStatus("모드 다운로드 중: $fileName")
             val path = modsDir.resolve(fileName)
             val backupFile = modsOld.resolve(path.name)
@@ -63,12 +66,18 @@ class ModInstallService(
 
     override fun uninstall() {
         val modsDir = installerProperties.minecraft.directory.resolve("mods").also { log.info { it } }
-        for (mod in installerProperties.mod?.mods ?: listOf()) {
-            val fileName = mod.downloadUrl.split("/").last()
+        val configured = (installerProperties.mod?.mods ?: listOf()).map { configFileName(it.downloadUrl) }
+        val names = uninstallFileNames(
+            configured,
+            InstalledRecord.read(installerProperties.minecraft.directory),
+            "mods",
+        )
+        for (fileName in names) {
             this.progressService.setStatus("모드 삭제 중: $fileName")
-            val path = modsDir.resolve(fileName)
-            path.deleteIfExists()
-            this.progressService.step(-1)
+            deleteInstalledFile(modsDir, fileName)
+            if (fileName in configured) {
+                this.progressService.step(-1)
+            }
         }
     }
 }
