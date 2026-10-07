@@ -19,6 +19,10 @@ import java.nio.file.Files
 import java.nio.file.Path
 import java.nio.file.StandardCopyOption
 import java.time.Duration
+import java.util.concurrent.CompletableFuture
+import java.util.concurrent.CompletionException
+import java.util.concurrent.TimeUnit
+import java.util.concurrent.TimeoutException
 
 private val log = KotlinLogging.logger { }
 
@@ -90,6 +94,7 @@ class RemoteInstallerConfig(
         const val SOURCE_ONLINE = "online"
         const val SOURCE_CACHE = "cache"
         const val MAX_MANIFEST_BYTES = 256 * 1024
+        val REQUEST_TIMEOUT: Duration = Duration.ofSeconds(5)
         private const val MAX_REDIRECTS = 3
 
         fun fromBundled(
@@ -114,20 +119,21 @@ class RemoteInstallerConfig(
                 throw IllegalArgumentException("Manifest URL must use https")
             }
             val client = HttpClient.newBuilder()
-                .connectTimeout(Duration.ofSeconds(5))
+                .connectTimeout(REQUEST_TIMEOUT)
                 .followRedirects(HttpClient.Redirect.NEVER)
                 .build()
             var current = uri
             repeat(MAX_REDIRECTS + 1) {
                 val request = HttpRequest.newBuilder(current)
-                    .timeout(Duration.ofSeconds(5))
+                    .timeout(REQUEST_TIMEOUT)
                     .header("Accept", "application/yaml, text/yaml, text/plain, */*")
                     .GET()
                     .build()
                 val response = client.send(request, HttpResponse.BodyHandlers.ofInputStream())
                 response.body().use { body ->
                     when (response.statusCode()) {
-                        in 200..299 -> return readLimited(body, MAX_MANIFEST_BYTES)
+                        // 요청 제한은 헤더까지다. 본문이 멈추면 여기서 끊는다.
+                        in 200..299 -> return readLimited(body, MAX_MANIFEST_BYTES, REQUEST_TIMEOUT)
                         in 300..399 -> {
                             val location = response.headers().firstValue("location")
                                 .orElseThrow { IllegalStateException("Redirect is missing location") }
@@ -206,12 +212,38 @@ internal fun httpsRedirect(current: URI, location: String): URI {
     return next
 }
 
-internal fun readLimited(input: InputStream, maxBytes: Int): String {
+internal fun readLimited(input: InputStream, maxBytes: Int, timeout: Duration? = null): String {
+    val bytes = if (timeout == null) {
+        readCapped(input, maxBytes)
+    } else {
+        readCappedWithin(input, maxBytes, timeout)
+    }
+    return bytes.decodeToString().removePrefix("\uFEFF")
+}
+
+private fun readCapped(input: InputStream, maxBytes: Int): ByteArray {
     val bytes = input.readNBytes(maxBytes + 1)
     if (bytes.size > maxBytes) {
         throw IllegalArgumentException("Manifest is too large")
     }
-    return bytes.decodeToString().removePrefix("\uFEFF")
+    return bytes
+}
+
+private fun readCappedWithin(input: InputStream, maxBytes: Int, timeout: Duration): ByteArray {
+    val future = CompletableFuture.supplyAsync { readCapped(input, maxBytes) }
+    try {
+        return future.orTimeout(timeout.toMillis(), TimeUnit.MILLISECONDS).join()
+    } catch (exception: CompletionException) {
+        input.close()
+        val cause = exception.cause
+        if (cause is TimeoutException) {
+            throw IllegalStateException("Manifest body timed out", cause)
+        }
+        if (cause is Exception) {
+            throw cause
+        }
+        throw exception
+    }
 }
 
 private fun isHttps(uri: URI): Boolean {

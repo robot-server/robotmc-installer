@@ -5,6 +5,7 @@ import com.sysbot32.robotmc.installer.config.InstalledRecord
 import com.sysbot32.robotmc.installer.config.InstallerProperties
 import com.sysbot32.robotmc.installer.config.configFileName
 import com.sysbot32.robotmc.installer.config.deleteInstalledFile
+import com.sysbot32.robotmc.installer.config.recordedNames
 import com.sysbot32.robotmc.installer.config.uninstallFileNames
 import com.sysbot32.robotmc.installer.progress.ProgressService
 import io.github.oshai.kotlinlogging.KotlinLogging
@@ -31,6 +32,15 @@ class ResourcePackInstallService(
             resourcePackDir.createDirectory()
         }
         resourcePackDir.toFile().listFiles()?.forEach { log.info { it } }
+        val current = installerProperties.resourcePacks.map { configFileName(it.downloadUrl) }.toSet()
+        val previous = recordedNames(InstalledRecord.read(installerProperties.minecraft.directory), "resourcepacks")
+        for (fileName in previous) {
+            if (fileName in current) {
+                continue
+            }
+            this.progressService.setStatus("리소스 팩 삭제 중: $fileName")
+            deleteInstalledFile(resourcePackDir, fileName)
+        }
         for (resourcePack in installerProperties.resourcePacks) {
             val fileName = configFileName(resourcePack.downloadUrl)
             this.progressService.setStatus("리소스 팩 다운로드 중: $fileName")

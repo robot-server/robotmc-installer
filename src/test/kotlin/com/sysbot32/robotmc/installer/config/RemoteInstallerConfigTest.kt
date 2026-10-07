@@ -12,9 +12,12 @@ import org.springframework.boot.builder.SpringApplicationBuilder
 import org.springframework.boot.context.properties.EnableConfigurationProperties
 import org.springframework.context.ConfigurableApplicationContext
 import org.yaml.snakeyaml.Yaml
+import java.io.PipedInputStream
+import java.io.PipedOutputStream
 import java.net.URI
 import java.nio.file.Files
 import java.nio.file.Path
+import java.time.Duration
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
@@ -343,6 +346,20 @@ class RemoteInstallerConfigTest {
         assertFailsWith<IllegalArgumentException> {
             RemoteInstallerConfig.fetchHttps(URI("http://example.com/installer.yml"))
         }
+    }
+
+    @Test
+    fun readLimitedStopsWhenTheBodyStalls() {
+        val input = PipedInputStream()
+        val output = PipedOutputStream(input)
+        output.write(byteArrayOf(1, 2))
+        val started = System.nanoTime()
+        assertFailsWith<IllegalStateException> {
+            readLimited(input, 100, Duration.ofMillis(200))
+        }
+        val elapsedMs = (System.nanoTime() - started) / 1_000_000
+        assertTrue(elapsedMs < 2_000, "elapsed $elapsedMs")
+        output.close()
     }
 
     @Test

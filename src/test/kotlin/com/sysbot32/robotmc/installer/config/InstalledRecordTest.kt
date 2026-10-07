@@ -72,6 +72,34 @@ class InstalledRecordTest {
     }
 
     @Test
+    fun reinstallRemovesAPreviouslyRecordedResourcePack() {
+        val minecraft = Files.createTempDirectory("installed-record")
+        val packs = minecraft.resolve("resourcepacks")
+        Files.createDirectories(packs)
+        Files.writeString(packs.resolve("a.zip"), "a")
+        Files.writeString(packs.resolve("b.zip"), "b")
+        Files.writeString(packs.resolve("user.zip"), "user")
+        InstalledRecord.write(minecraft, listOf("resourcepacks/a.zip"))
+        val properties = properties(
+            minecraft,
+            mods = emptyList(),
+            packs = listOf("https://example.com/b.zip"),
+        )
+
+        packService(properties).install()
+        InstalledRecordService(properties).install()
+
+        assertFalse(Files.exists(packs.resolve("a.zip")))
+        assertTrue(Files.exists(packs.resolve("b.zip")))
+        assertTrue(Files.exists(packs.resolve("user.zip")))
+        assertEquals(listOf("resourcepacks/b.zip"), InstalledRecord.read(minecraft))
+
+        packService(properties).uninstall()
+        assertFalse(Files.exists(packs.resolve("b.zip")))
+        assertTrue(Files.exists(packs.resolve("user.zip")))
+    }
+
+    @Test
     fun uninstallDeletesTheUnionAndLeavesNamesThatEscapeTheFolder() {
         val minecraft = Files.createTempDirectory("installed-record")
         Files.createDirectories(minecraft.resolve("mods"))
