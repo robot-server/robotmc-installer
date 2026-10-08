@@ -1,3 +1,7 @@
+import java.nio.file.Files
+import java.security.MessageDigest
+import java.util.jar.JarFile
+
 plugins {
     kotlin("jvm") version "2.2.20"
     kotlin("plugin.spring") version "2.2.20"
@@ -5,7 +9,6 @@ plugins {
     id("org.jetbrains.compose") version "1.12.1"
     id("org.springframework.boot") version "3.5.0"
     id("io.spring.dependency-management") version "1.1.7"
-    id("edu.sc.seis.launch4j") version "3.0.6"
 }
 
 group = "com.sysbot32"
@@ -39,7 +42,8 @@ dependencies {
     implementation("io.github.oshai:kotlin-logging-jvm:7.0.7")
     implementation("org.apache.commons:commons-exec:1.4.0")
     implementation("dev.dewy:nbt:1.5.1")
-    // 배포물은 OS별 패키지가 아니라 bootJar 하나다. currentOs는 빌드한 기기의 네이티브만 넣는다.
+    // bootJar는 OS와 상관없이 그대로 쓰는 실행 jar다. currentOs만 넣으면 다른 OS 네이티브가 빠진다.
+    // 현재 OS 앱 이미지는 이 jar를 감싼다.
     implementation(compose.desktop.linux_arm64)
     implementation(compose.desktop.linux_x64)
     implementation(compose.desktop.macos_arm64)
@@ -112,4 +116,326 @@ tasks.named<Jar>("jar") {
 
 tasks.withType<Test> {
     useJUnitPlatform()
+}
+
+// bootJar의 Main-Class. Kotlin main이 아니다. 중첩된 BOOT-INF를 이 로더가 연다.
+val bootJarMainClass = "org.springframework.boot.loader.launch.JarLauncher"
+val installerAppName = "RobotMC Installer"
+
+val installerJdk = extensions.getByType(JavaToolchainService::class.java).launcherFor {
+    languageVersion.set(JavaLanguageVersion.of(21))
+}
+val installerBootJar = tasks.named<org.springframework.boot.gradle.tasks.bundling.BootJar>("bootJar")
+    .flatMap { it.archiveFile }
+val installerAppImageDir = layout.buildDirectory.dir("installer-app-image")
+val installerAppImageWork = layout.buildDirectory.dir("tmp/installer-app-image")
+
+tasks.register("packageInstallerAppImage") {
+    group = "distribution"
+    description = "현재 OS용 앱 이미지에 Java 21 런타임과 bootJar를 넣는다."
+    dependsOn(installerBootJar)
+    inputs.file(installerBootJar)
+    inputs.property("version", providers.provider { project.version.toString() })
+    inputs.property("jdk", installerJdk.map { it.metadata.installationPath.asFile.absolutePath })
+    outputs.dir(installerAppImageDir)
+    doLast {
+        buildInstallerAppImage(
+            jdkHome = installerJdk.get().metadata.installationPath.asFile,
+            bootJar = installerBootJar.get().asFile,
+            destination = installerAppImageDir.get().asFile,
+            work = installerAppImageWork.get().asFile,
+            appVersion = project.version.toString(),
+        )
+    }
+}
+
+// test에 붙이지 않는다. 이미지를 만들면 단위 테스트가 느려진다.
+tasks.register("checkInstallerAppImage") {
+    group = "verification"
+    description = "앱 이미지의 런처와 포함된 Java 21 java를 검사한다."
+    dependsOn("packageInstallerAppImage")
+    inputs.file(installerBootJar)
+    inputs.dir(installerAppImageDir)
+    inputs.property("jdk", installerJdk.map { it.metadata.installationPath.asFile.absolutePath })
+    doLast {
+        val testTask = tasks.named("test").get()
+        val testDependsOnImage = testTask.taskDependencies.getDependencies(testTask)
+            .any { it.name == "packageInstallerAppImage" || it.name == "checkInstallerAppImage" }
+        if (testDependsOnImage) {
+            throw org.gradle.api.GradleException("test 태스크가 앱 이미지를 만들면 안 된다.")
+        }
+        val result = verifyInstallerAppImage(
+            imageDir = installerAppImageDir.get().asFile,
+            bootJar = installerBootJar.get().asFile,
+            jdkHome = installerJdk.get().metadata.installationPath.asFile,
+        )
+        logger.lifecycle("launcher: ${result.launcher.canonicalPath}")
+        logger.lifecycle("bundled java: ${result.javaExecutable.canonicalPath}")
+        logger.lifecycle(result.versionOutput.trim())
+        logger.lifecycle("major version: ${result.major}")
+    }
+}
+
+fun buildInstallerAppImage(
+    jdkHome: File,
+    bootJar: File,
+    destination: File,
+    work: File,
+    appVersion: String,
+) {
+    val mainClass = JarFile(bootJar).use { jar ->
+        jar.manifest?.mainAttributes?.getValue("Main-Class")
+    }
+    if (mainClass != bootJarMainClass) {
+        throw org.gradle.api.GradleException("bootJar Main-Class가 $bootJarMainClass 이 아닙니다: $mainClass")
+    }
+    if (destination.exists() && !destination.deleteRecursively()) {
+        throw org.gradle.api.GradleException("이전 앱 이미지를 지우지 못했습니다: ${destination.absolutePath}")
+    }
+    if (work.exists() && !work.deleteRecursively()) {
+        throw org.gradle.api.GradleException("작업 디렉터리를 지우지 못했습니다: ${work.absolutePath}")
+    }
+    val input = File(work, "input")
+    val runtime = File(work, "runtime")
+    if (!input.mkdirs() || !destination.mkdirs()) {
+        throw org.gradle.api.GradleException("앱 이미지 디렉터리를 만들지 못했습니다.")
+    }
+    bootJar.copyTo(File(input, bootJar.name))
+    // jpackage 기본 jlink는 --strip-native-commands 라서 java가 빠지고, 모듈도 앱이 직접 쓰는 것만 남긴다.
+    // 모드 로더 설치 jar는 이 런타임의 java로 실행하므로 JDK 모듈 전체를 남긴다.
+    runCaptured(
+        listOf(
+            jdkBin(jdkHome, "jlink").absolutePath,
+            "--module-path",
+            File(jdkHome, "jmods").absolutePath,
+            "--add-modules",
+            "ALL-MODULE-PATH",
+            "--output",
+            runtime.absolutePath,
+        ),
+    )
+    val command = mutableListOf(
+        jdkBin(jdkHome, "jpackage").absolutePath,
+        "--type", "app-image",
+        "--dest", destination.absolutePath,
+        "--name", installerAppName,
+        "--vendor", "RobotMC",
+        "--app-version", appVersion,
+        "--input", input.absolutePath,
+        "--main-jar", bootJar.name,
+        "--main-class", bootJarMainClass,
+        "--runtime-image", runtime.absolutePath,
+        "--description", installerAppName,
+    )
+    if (installerHostOs() == "mac") {
+        command += listOf("--mac-package-identifier", "com.sysbot32.robotmc.installer")
+    }
+    runCaptured(command)
+}
+
+data class InstallerImageCheck(
+    val launcher: File,
+    val javaExecutable: File,
+    val versionOutput: String,
+    val major: Int,
+)
+
+fun verifyInstallerAppImage(imageDir: File, bootJar: File, jdkHome: File): InstallerImageCheck {
+    val paths = installerImagePaths(imageDir)
+    if (!paths.launcher.isFile) {
+        throw org.gradle.api.GradleException("런처가 없습니다: ${paths.launcher.absolutePath}")
+    }
+    if (installerHostOs() != "windows" && !paths.launcher.canExecute()) {
+        throw org.gradle.api.GradleException("런처를 실행할 수 없습니다: ${paths.launcher.absolutePath}")
+    }
+    if (!paths.javaExecutable.isFile) {
+        throw org.gradle.api.GradleException("런타임 java가 없습니다: ${paths.javaExecutable.absolutePath}")
+    }
+    val imageRoot = paths.image.canonicalFile
+    val javaCanonical = paths.javaExecutable.canonicalFile
+    if (!javaCanonical.isInside(imageRoot) || !paths.launcher.canonicalFile.isInside(imageRoot)) {
+        throw org.gradle.api.GradleException("런처 또는 java가 이미지 밖에 있습니다.")
+    }
+    val launchers = paths.launcher.parentFile.listFiles()?.filter { it.isFile }.orEmpty()
+    if (launchers.size != 1 || launchers.single().canonicalFile != paths.launcher.canonicalFile) {
+        throw org.gradle.api.GradleException("진입 런처가 하나가 아닙니다: ${launchers.map { it.name }}")
+    }
+    val jars = paths.appDir.listFiles { file -> file.isFile && file.extension == "jar" }?.toList().orEmpty()
+    if (jars.size != 1 || jars.single().name != bootJar.name || sha256(jars.single()) != sha256(bootJar)) {
+        throw org.gradle.api.GradleException("이미지 안의 jar가 bootJar와 다릅니다.")
+    }
+    val cfg = paths.appDir.listFiles { file -> file.isFile && file.extension == "cfg" }?.toList().orEmpty()
+    if (cfg.size != 1 || bootJarMainClass !in cfg.single().readText() || bootJar.name !in cfg.single().readText()) {
+        throw org.gradle.api.GradleException("런처 설정이 bootJar를 가리키지 않습니다.")
+    }
+    val versionOutput = runCaptured(listOf(javaCanonical.absolutePath, "-version"))
+    val major = javaMajor(versionOutput)
+    if (major != 21) {
+        throw org.gradle.api.GradleException("Java 메이저 버전이 21이 아닙니다: $versionOutput")
+    }
+    val bundledModules = moduleNames(javaCanonical)
+    val jdkModules = moduleNames(jdkBin(jdkHome, "java"))
+    if (bundledModules != jdkModules) {
+        throw org.gradle.api.GradleException(
+            "런타임 모듈이 JDK와 다릅니다. missing=${jdkModules - bundledModules} extra=${bundledModules - jdkModules}",
+        )
+    }
+    val probe = execProbeJar(javaCanonical)
+    val probeHome = probe.lineSequence().first { it.startsWith("probe.java.home=") }
+        .removePrefix("probe.java.home=")
+    val probeVersion = probe.lineSequence().first { it.startsWith("probe.java.version=") }
+        .removePrefix("probe.java.version=")
+    if (javaMajor("version \"$probeVersion\"") != 21) {
+        throw org.gradle.api.GradleException("jar 실행의 Java 버전이 21이 아닙니다: $probeVersion")
+    }
+    val javaName = if (installerHostOs() == "windows") "java.exe" else "java"
+    val probeJava = File(probeHome, "bin/$javaName").canonicalFile
+    if (probeJava != javaCanonical) {
+        throw org.gradle.api.GradleException("java.home의 java가 이미지 런타임과 다릅니다: $probeJava")
+    }
+    return InstallerImageCheck(paths.launcher, javaCanonical, versionOutput, major)
+}
+
+data class InstallerImagePaths(
+    val image: File,
+    val launcher: File,
+    val javaExecutable: File,
+    val appDir: File,
+)
+
+fun installerImagePaths(destination: File): InstallerImagePaths {
+    val name = installerAppName
+    return when (installerHostOs()) {
+        "mac" -> {
+            val image = File(destination, "$name.app")
+            InstallerImagePaths(
+                image = image,
+                launcher = File(image, "Contents/MacOS/$name"),
+                javaExecutable = File(image, "Contents/runtime/Contents/Home/bin/java"),
+                appDir = File(image, "Contents/app"),
+            )
+        }
+        "windows" -> {
+            val image = File(destination, name)
+            InstallerImagePaths(
+                image = image,
+                launcher = File(image, "$name.exe"),
+                javaExecutable = File(image, "runtime/bin/java.exe"),
+                appDir = File(image, "app"),
+            )
+        }
+        else -> {
+            val image = File(destination, name)
+            InstallerImagePaths(
+                image = image,
+                launcher = File(image, "bin/$name"),
+                javaExecutable = File(image, "lib/runtime/bin/java"),
+                appDir = File(image, "lib/app"),
+            )
+        }
+    }
+}
+
+fun installerHostOs(): String {
+    val os = System.getProperty("os.name").lowercase()
+    return when {
+        os.startsWith("mac") || os.startsWith("darwin") -> "mac"
+        os.startsWith("windows") -> "windows"
+        else -> "linux"
+    }
+}
+
+fun jdkBin(jdkHome: File, name: String): File {
+    val fileName = if (installerHostOs() == "windows") "$name.exe" else name
+    return File(jdkHome, "bin/$fileName")
+}
+
+fun File.isInside(root: File): Boolean {
+    val child = canonicalPath
+    val parent = root.canonicalPath
+    return child == parent || child.startsWith(parent + File.separator)
+}
+
+fun javaMajor(versionOutput: String): Int {
+    val quoted = Regex("""version "([^"]+)"""").find(versionOutput)?.groupValues?.get(1)
+        ?: throw org.gradle.api.GradleException("java 버전 문자열을 찾지 못했습니다: $versionOutput")
+    val parts = quoted.split('.', '_', '-')
+    val first = parts[0].toInt()
+    return if (first == 1 && parts.size >= 2) parts[1].toInt() else first
+}
+
+fun moduleNames(javaExecutable: File): Set<String> {
+    return runCaptured(listOf(javaExecutable.absolutePath, "--list-modules"))
+        .lineSequence()
+        .map { it.trim() }
+        .filter { it.isNotEmpty() }
+        .map { it.substringBefore('@').substringBefore(' ') }
+        .toSet()
+}
+
+fun execProbeJar(javaExecutable: File): String {
+    val javac = File(javaExecutable.parentFile, if (installerHostOs() == "windows") "javac.exe" else "javac")
+    val jarTool = File(javaExecutable.parentFile, if (installerHostOs() == "windows") "jar.exe" else "jar")
+    if (!javac.isFile || !jarTool.isFile) {
+        throw org.gradle.api.GradleException("런타임에 javac 또는 jar가 없습니다: ${javaExecutable.parent}")
+    }
+    val dir = Files.createTempDirectory("installer-runtime-probe").toFile()
+    try {
+        val source = File(dir, "RuntimeProbe.java")
+        source.writeText(
+            """
+            public class RuntimeProbe {
+                public static void main(String[] args) {
+                    System.out.println("probe.java.home=" + System.getProperty("java.home"));
+                    System.out.println("probe.java.version=" + System.getProperty("java.version"));
+                }
+            }
+            """.trimIndent() + "\n",
+        )
+        val classes = File(dir, "classes")
+        if (!classes.mkdirs()) {
+            throw org.gradle.api.GradleException("probe 디렉터리를 만들지 못했습니다.")
+        }
+        runCaptured(listOf(javac.absolutePath, "-d", classes.absolutePath, source.absolutePath))
+        val jarFile = File(dir, "probe.jar")
+        runCaptured(
+            listOf(
+                jarTool.absolutePath,
+                "cfe",
+                jarFile.absolutePath,
+                "RuntimeProbe",
+                "-C",
+                classes.absolutePath,
+                "RuntimeProbe.class",
+            ),
+        )
+        return runCaptured(listOf(javaExecutable.absolutePath, "-jar", jarFile.absolutePath))
+    } finally {
+        dir.deleteRecursively()
+    }
+}
+
+fun sha256(file: File): String {
+    val digest = MessageDigest.getInstance("SHA-256")
+    file.inputStream().use { input ->
+        val buffer = ByteArray(1024 * 1024)
+        while (true) {
+            val read = input.read(buffer)
+            if (read < 0) {
+                break
+            }
+            digest.update(buffer, 0, read)
+        }
+    }
+    return digest.digest().joinToString("") { "%02x".format(it) }
+}
+
+fun runCaptured(command: List<String>): String {
+    val process = ProcessBuilder(command).redirectErrorStream(true).start()
+    val output = process.inputStream.bufferedReader().readText()
+    val code = process.waitFor()
+    if (code != 0) {
+        throw org.gradle.api.GradleException("실패 ($code): ${command.joinToString(" ")}\n$output")
+    }
+    return output
 }
