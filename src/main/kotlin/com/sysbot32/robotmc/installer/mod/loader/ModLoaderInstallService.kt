@@ -10,7 +10,7 @@ import org.apache.commons.exec.ExecuteWatchdog
 import org.springframework.stereotype.Service
 import org.springframework.web.client.RestClient
 import java.nio.file.Files
-import java.nio.file.Paths
+import java.nio.file.Path
 import java.time.Duration
 
 private val log = KotlinLogging.logger { }
@@ -59,6 +59,11 @@ class ModLoaderInstallService(
     private val installerProperties: InstallerProperties,
     private val progressService: ProgressService,
 ) : InstallService {
+    /**
+     * installer JAR를 두는 디렉터리. 기본값은 홈 캐시이고, 테스트는 임시 디렉터리를 넣는다.
+     */
+    internal var installerDirectory: Path = defaultModLoaderInstallerDirectory()
+
     override val order: Int
         get() = 10
 
@@ -73,15 +78,19 @@ class ModLoaderInstallService(
             minecraftDirectory = this.installerProperties.minecraft.directory,
             installOptions = loader?.installOptions.orEmpty(),
             profiles = this.launcherService.getProfiles(),
+            installerDirectory = this.installerDirectory,
         )
-        val installerPath = Paths.get(decision.installerUrl.substringAfterLast('/'))
+        val installerPath = decision.installerJar
         if (!Files.exists(installerPath)) {
             this.progressService.setStatus("모드 로더 설치 프로그램 다운로드 중...")
             this.restClient.get()
                 .uri(decision.installerUrl)
                 .retrieve()
                 .toEntity(ByteArray::class.java)
-                .body?.let { Files.write(installerPath, it) }
+                .body?.let { bytes ->
+                    installerPath.parent?.let { parent -> Files.createDirectories(parent) }
+                    Files.write(installerPath, bytes)
+                }
         }
         this.progressService.step("모드 로더 설치 중...")
         if (decision.runInstaller) {
