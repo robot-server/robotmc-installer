@@ -7,15 +7,23 @@ import java.nio.file.Path
 private const val FABRIC_INSTALLER_VERSION = "1.0.3"
 
 /**
- * 모드 로더 installer를 받을 주소, 프로필 version id, 프로세스 인자, 실행 여부.
+ * 모드 로더 installer를 받을 주소, 그 JAR의 절대 경로, 프로필 version id, 프로세스 인자, 실행 여부.
  * 다운로드와 프로세스 실행은 여기 없다.
  */
 data class ModLoaderInstallDecision(
     val installerUrl: String,
+    val installerJar: Path,
     val profileVersionId: String,
     val arguments: List<String>,
     val runInstaller: Boolean,
 )
+
+/**
+ * 로그와 manifest가 있는 홈 캐시. 작업 디렉터리가 `/`여도 쓸 수 있다.
+ */
+fun defaultModLoaderInstallerDirectory(): Path {
+    return Path.of(System.getProperty("user.home"), ".robotmc-installer")
+}
 
 /**
  * [profiles]의 키는 보지 않는다. Fabric installer는 프로필 키를 `fabric-loader-<mc>`로 두고
@@ -28,6 +36,7 @@ fun decideModLoaderInstall(
     minecraftDirectory: Path,
     installOptions: List<String>,
     profiles: LauncherProfilesJson,
+    installerDirectory: Path = defaultModLoaderInstallerDirectory(),
 ): ModLoaderInstallDecision {
     if (type == null) {
         throw IllegalArgumentException("Unsupported mod loader type null")
@@ -37,15 +46,25 @@ fun decideModLoaderInstall(
     }
     val installerUrl = installerUrl(type, loaderVersion)
     val profileVersionId = profileVersionId(type, loaderVersion, minecraftVersion)
-    val arguments = listOf("java", "-jar", installerUrl.substringAfterLast('/')) +
+    // 파일 이름만 넘기면 작업 디렉터리에 받는다. Finder로 연 앱은 그 디렉터리가 `/`이다.
+    val installerJar = modLoaderInstallerJar(installerUrl, installerDirectory)
+    val arguments = listOf("java", "-jar", installerJar.toString()) +
         installerArguments(type, loaderVersion, minecraftVersion, minecraftDirectory, installOptions)
     val alreadyInstalled = profiles.profiles.values.any { it.lastVersionId == profileVersionId }
     return ModLoaderInstallDecision(
         installerUrl = installerUrl,
+        installerJar = installerJar,
         profileVersionId = profileVersionId,
         arguments = arguments,
         runInstaller = !alreadyInstalled,
     )
+}
+
+/**
+ * URL의 마지막 조각을 [installerDirectory] 아래 절대 경로로 둔다.
+ */
+private fun modLoaderInstallerJar(installerUrl: String, installerDirectory: Path): Path {
+    return installerDirectory.toAbsolutePath().resolve(installerUrl.substringAfterLast('/'))
 }
 
 /**
