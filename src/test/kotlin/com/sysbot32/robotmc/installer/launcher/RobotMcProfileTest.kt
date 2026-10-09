@@ -337,7 +337,9 @@ class RobotMcProfileTest {
 
         service.uninstall()
 
-        assertFalse(Files.exists(gameDir))
+        assertEquals("save", Files.readString(gameDir.resolve("saves/World/level.dat")))
+        assertFalse(Files.exists(gameDir.resolve("mods")))
+        assertFalse(Files.exists(gameDir.resolve("servers.dat")))
         assertFalse(Files.exists(loaderVersionAliasPath(minecraft)))
         assertEquals("loader", Files.readString(minecraft.resolve("versions/neoforge-21.11.6-beta/neoforge-21.11.6-beta.json")))
         assertEquals("vanilla-mod", Files.readString(minecraft.resolve("mods/keep.jar")))

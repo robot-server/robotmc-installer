@@ -39,7 +39,7 @@ class InstallerSessionTest {
             install.state.value.prompt,
         )
         assertEquals(
-            "이 설치의 프로필과 게임 폴더를 제거할까요?\n그 폴더의 세이브도 함께 지워져요.",
+            "이 설치의 프로필과 게임 폴더를 제거할까요?\n세이브는 그대로 둬요.",
             uninstall.state.value.prompt,
         )
         assertEquals(SessionPhase.Confirm, install.state.value.phase)
@@ -119,7 +119,7 @@ class InstallerSessionTest {
         assertEquals(SessionPhase.Confirm, removed.phase)
         assertEquals(Mode.UNINSTALL, removed.mode)
         assertEquals(
-            "이 설치의 프로필과 게임 폴더를 제거할까요?\n그 폴더의 세이브도 함께 지워져요.",
+            "이 설치의 프로필과 게임 폴더를 제거할까요?\n세이브는 그대로 둬요.",
             removed.prompt,
         )
         assertEquals(4, removed.completedSteps)

@@ -109,7 +109,8 @@ fun writeLoaderVersionAlias(
 }
 
 /**
- * 이 구성의 게임 폴더만 지운다. 마인크래프트 디렉터리와 그 옆의 폴더는 건드리지 않는다.
+ * 이 구성의 게임 폴더를 지운다. saves 는 남긴다.
+ * 마인크래프트 디렉터리와 그 옆의 폴더는 건드리지 않는다.
  */
 fun deleteGameDirectory(minecraftDirectory: Path, directoryName: String) {
     val gameDir = gameDirectory(minecraftDirectory, directoryName)
@@ -118,7 +119,25 @@ fun deleteGameDirectory(minecraftDirectory: Path, directoryName: String) {
     if (target.parent != minecraft) {
         return
     }
-    deleteTreeIfExists(target)
+    if (Files.isSymbolicLink(target) || !Files.isDirectory(target)) {
+        deleteTreeIfExists(target)
+        return
+    }
+    Files.list(target).use { children ->
+        children.forEach { child ->
+            if (child.fileName?.toString() == "saves") {
+                return@forEach
+            }
+            if (child.toAbsolutePath().normalize().parent != target) {
+                return@forEach
+            }
+            deleteTreeIfExists(child)
+        }
+    }
+    val saves = target.resolve("saves")
+    if (!Files.exists(saves) && !Files.isSymbolicLink(saves)) {
+        deleteTreeIfExists(target)
+    }
 }
 
 /**

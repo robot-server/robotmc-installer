@@ -2,6 +2,7 @@ package com.sysbot32.robotmc.installer.launcher
 
 import com.fasterxml.jackson.databind.ObjectMapper
 import com.sysbot32.robotmc.installer.config.DEFAULT_VERSION_ID
+import com.sysbot32.robotmc.installer.config.gameDirectory
 import java.nio.file.Files
 import kotlin.test.Test
 import kotlin.test.assertEquals
@@ -35,5 +36,26 @@ class LoaderVersionAliasTest {
         assertEquals("neoforge-21.11.6-beta", readLoaderVersionAliasInherits(minecraft))
         assertFalse(Files.exists(minecraft.resolve("robotmc").resolve("versions")))
         assertNull(loaderVersionAliasInherits("""{"id":"RobotMC"}"""))
+    }
+
+    @Test
+    fun deleteGameDirectoryKeepsSavesAndRemovesAnEmptyFolder() {
+        val minecraft = Files.createTempDirectory("robotmc-alias")
+        val withSaves = gameDirectory(minecraft, "kept")
+        Files.createDirectories(withSaves.resolve("saves/World"))
+        Files.writeString(withSaves.resolve("saves/World/level.dat"), "save")
+        Files.writeString(withSaves.resolve("options.txt"), "options")
+        val empty = gameDirectory(minecraft, "empty")
+        Files.createDirectories(empty.resolve("mods"))
+        Files.writeString(empty.resolve("mods/a.jar"), "mod")
+
+        deleteGameDirectory(minecraft, "kept")
+        deleteGameDirectory(minecraft, "empty")
+        deleteGameDirectory(minecraft, "../outside")
+
+        assertEquals("save", Files.readString(withSaves.resolve("saves/World/level.dat")))
+        assertFalse(Files.exists(withSaves.resolve("options.txt")))
+        assertFalse(Files.exists(empty))
+        assertTrue(Files.isDirectory(minecraft))
     }
 }
