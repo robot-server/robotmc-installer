@@ -1,6 +1,7 @@
 package com.sysbot32.robotmc.installer.config
 
 import com.sysbot32.robotmc.installer.mod.loader.ModLoaderType
+import com.sysbot32.robotmc.installer.exception.UserException
 import com.sysbot32.robotmc.installer.server.ServersDat
 import org.springframework.boot.context.properties.ConfigurationProperties
 import java.nio.file.Path
@@ -10,6 +11,24 @@ const val DEFAULT_PROFILE_NAME = "RobotMC"
 const val DEFAULT_PROFILE_KEY = "robotmc"
 const val DEFAULT_VERSION_ID = "RobotMC"
 const val DEFAULT_GAME_DIRECTORY_NAME = "robotmc"
+
+/** 마인크래프트 디렉터리 바로 아래에서 게임이 쓰는 폴더. 게임 폴더 이름으로 쓰면 제거가 그 데이터를 지운다. */
+val MINECRAFT_ROOT_DIRECTORY_NAMES = setOf(
+    "assets",
+    "config",
+    "crash-reports",
+    "data",
+    "libraries",
+    "logs",
+    "mods",
+    "mods_old",
+    "resourcepacks",
+    "saves",
+    "screenshots",
+    "server-resource-packs",
+    "shaderpacks",
+    "versions",
+)
 
 @ConfigurationProperties(prefix = "installer")
 data class InstallerProperties(
@@ -101,7 +120,19 @@ fun gameDirectory(
 }
 
 fun InstallerProperties.gameDirectory(): Path {
-    return gameDirectory(this.minecraft.directory, this.gameDirectoryName)
+    return gameDirectory(this.minecraft.directory, gameDirectoryNameOrThrow(this.gameDirectoryName))
+}
+
+/**
+ * 게임 폴더 이름. 비어 있거나 경로면 [DEFAULT_GAME_DIRECTORY_NAME].
+ * 마인크래프트 기본 폴더와 같으면 거부한다.
+ */
+fun gameDirectoryNameOrThrow(directoryName: String): String {
+    val name = pathSegment(directoryName, DEFAULT_GAME_DIRECTORY_NAME)
+    if (name.lowercase() in MINECRAFT_ROOT_DIRECTORY_NAMES) {
+        throw UserException("게임 폴더 이름 \"$name\" 은 마인크래프트 기본 폴더와 겹쳐요.")
+    }
+    return name
 }
 
 /**

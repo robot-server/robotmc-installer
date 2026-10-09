@@ -119,7 +119,14 @@ class ModLoaderInstallService(
         this.progressService.setStatus("프로필과 게임 폴더 제거 중...")
         val minecraft = this.installerProperties.minecraft.directory
         this.launcherService.removeConfiguredProfile()
-        deleteVersionAlias(minecraft, this.installerProperties.launcherVersionId())
+        val loader = this.installerProperties.mod?.loader
+        if (loader?.type != null && !loader.version.isNullOrBlank()) {
+            deleteVersionAlias(
+                minecraft,
+                this.installerProperties.launcherVersionId(),
+                profileVersionId(loader.type, loader.version, this.installerProperties.minecraft.version),
+            )
+        }
         deleteGameDirectory(minecraft, this.installerProperties.gameDirectoryName)
         this.progressService.step(-2)
     }

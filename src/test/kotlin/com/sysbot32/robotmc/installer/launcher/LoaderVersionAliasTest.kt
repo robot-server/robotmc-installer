@@ -2,10 +2,13 @@ package com.sysbot32.robotmc.installer.launcher
 
 import com.fasterxml.jackson.databind.ObjectMapper
 import com.sysbot32.robotmc.installer.config.DEFAULT_VERSION_ID
+import com.sysbot32.robotmc.installer.config.InstallerProperties
 import com.sysbot32.robotmc.installer.config.gameDirectory
+import com.sysbot32.robotmc.installer.exception.UserException
 import java.nio.file.Files
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertFailsWith
 import kotlin.test.assertFalse
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
@@ -57,5 +60,70 @@ class LoaderVersionAliasTest {
         assertFalse(Files.exists(withSaves.resolve("options.txt")))
         assertFalse(Files.exists(empty))
         assertTrue(Files.isDirectory(minecraft))
+    }
+
+    @Test
+    fun deleteDoesNotFollowANestedSymbolicLink() {
+        val minecraft = Files.createTempDirectory("robotmc-alias")
+        val gameDir = gameDirectory(minecraft, "pack")
+        val outside = Files.createTempDirectory("robotmc-outside")
+        Files.createDirectories(gameDir.resolve("config/nested"))
+        Files.writeString(outside.resolve("keep.txt"), "keep")
+        Files.createSymbolicLink(gameDir.resolve("config/nested/link"), outside)
+
+        deleteGameDirectory(minecraft, "pack")
+
+        assertEquals("keep", Files.readString(outside.resolve("keep.txt")))
+        assertFalse(Files.exists(gameDir.resolve("config")))
+    }
+
+    @Test
+    fun savesGameDirectoryNameIsRejected() {
+        val minecraft = Files.createTempDirectory("robotmc-alias")
+        Files.createDirectories(minecraft.resolve("saves/World"))
+        Files.writeString(minecraft.resolve("saves/World/level.dat"), "world")
+        val properties = InstallerProperties(
+            minecraft = InstallerProperties.Minecraft(version = "1.21.11", directory = minecraft),
+            mod = null,
+            gameDirectoryName = "saves",
+        )
+
+        assertFailsWith<UserException> { properties.gameDirectory() }
+        assertFailsWith<UserException> { deleteGameDirectory(minecraft, "saves") }
+        assertEquals("world", Files.readString(minecraft.resolve("saves/World/level.dat")))
+    }
+
+    @Test
+    fun aliasDoesNotReplaceOrDeleteTheLoaderVersion() {
+        val minecraft = Files.createTempDirectory("robotmc-alias")
+        val loaderJson = minecraft.resolve("versions/neoforge-21.11.6-beta/neoforge-21.11.6-beta.json")
+        Files.createDirectories(loaderJson.parent)
+        Files.writeString(loaderJson, """{"id":"neoforge-21.11.6-beta","inheritsFrom":"1.21.11"}""")
+
+        assertFailsWith<UserException> {
+            writeLoaderVersionAlias(minecraft, "neoforge-21.11.6-beta", "neoforge-21.11.6-beta")
+        }
+        deleteVersionAlias(minecraft, "neoforge-21.11.6-beta", "neoforge-21.11.6-beta")
+
+        assertEquals(
+            """{"id":"neoforge-21.11.6-beta","inheritsFrom":"1.21.11"}""",
+            Files.readString(loaderJson),
+        )
+    }
+
+    @Test
+    fun deleteFailureIsReported() {
+        val minecraft = Files.createTempDirectory("robotmc-alias")
+        val gameDir = gameDirectory(minecraft, "pack")
+        val locked = gameDir.resolve("locked")
+        Files.createDirectories(locked)
+        Files.writeString(locked.resolve("keep.txt"), "keep")
+        locked.toFile().setWritable(false)
+        try {
+            assertFailsWith<UserException> { deleteGameDirectory(minecraft, "pack") }
+            assertEquals("keep", Files.readString(locked.resolve("keep.txt")))
+        } finally {
+            locked.toFile().setWritable(true)
+        }
     }
 }

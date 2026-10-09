@@ -1,10 +1,13 @@
 package com.sysbot32.robotmc.installer.launcher
 
-import com.sysbot32.robotmc.installer.config.gameDirectory
 import com.fasterxml.jackson.databind.ObjectMapper
 import com.fasterxml.jackson.databind.node.ObjectNode
 import com.sysbot32.robotmc.installer.config.DEFAULT_VERSION_ID
+import com.sysbot32.robotmc.installer.config.gameDirectory
+import com.sysbot32.robotmc.installer.config.gameDirectoryNameOrThrow
 import com.sysbot32.robotmc.installer.config.pathSegment
+import com.sysbot32.robotmc.installer.exception.UserException
+import java.io.IOException
 import java.nio.file.Files
 import java.nio.file.Path
 import java.time.OffsetDateTime
@@ -99,10 +102,17 @@ fun writeLoaderVersionAlias(
     inheritsFrom: String,
     versionId: String = DEFAULT_VERSION_ID,
 ) {
-    val path = loaderVersionAliasPath(minecraftDirectory, versionId)
-    Files.createDirectories(path.parent)
+    val id = pathSegment(versionId, DEFAULT_VERSION_ID)
+    if (id == inheritsFrom) {
+        throw UserException("버전 id \"$id\" 는 로더 버전과 같아요.")
+    }
+    val path = loaderVersionAliasPath(minecraftDirectory, id)
     val current = if (Files.isRegularFile(path)) Files.readString(path) else null
-    val edited = editLoaderVersionAlias(current, inheritsFrom, versionId)
+    if (current != null && !isLoaderVersionAlias(current, id)) {
+        throw UserException("버전 id \"$id\" 에는 이미 다른 버전 파일이 있어요.")
+    }
+    Files.createDirectories(path.parent)
+    val edited = editLoaderVersionAlias(current, inheritsFrom, id)
     if (edited != current) {
         Files.writeString(path, edited)
     }
@@ -113,7 +123,8 @@ fun writeLoaderVersionAlias(
  * 마인크래프트 디렉터리와 그 옆의 폴더는 건드리지 않는다.
  */
 fun deleteGameDirectory(minecraftDirectory: Path, directoryName: String) {
-    val gameDir = gameDirectory(minecraftDirectory, directoryName)
+    val name = gameDirectoryNameOrThrow(directoryName)
+    val gameDir = gameDirectory(minecraftDirectory, name)
     val minecraft = minecraftDirectory.toAbsolutePath().normalize()
     val target = gameDir.toAbsolutePath().normalize()
     if (target.parent != minecraft) {
@@ -141,10 +152,23 @@ fun deleteGameDirectory(minecraftDirectory: Path, directoryName: String) {
 }
 
 /**
- * versions/<versionId> 만 지운다. versions 폴더와 다른 버전은 둔다.
+ * 이 설치가 쓴 별칭 폴더만 지운다.
+ * [loaderVersionId] 와 같거나, JSON 이 그 로더를 가리키는 별칭이 아니면 원본 버전은 둔다.
  */
-fun deleteVersionAlias(minecraftDirectory: Path, versionId: String) {
-    val versionDir = loaderVersionAliasPath(minecraftDirectory, versionId).parent ?: return
+fun deleteVersionAlias(minecraftDirectory: Path, versionId: String, loaderVersionId: String) {
+    val id = pathSegment(versionId, DEFAULT_VERSION_ID)
+    if (id == loaderVersionId) {
+        return
+    }
+    val json = loaderVersionAliasPath(minecraftDirectory, id)
+    if (!Files.isRegularFile(json)) {
+        return
+    }
+    val document = Files.readString(json)
+    if (!isLoaderVersionAlias(document, id) || loaderVersionAliasInherits(document) != loaderVersionId) {
+        return
+    }
+    val versionDir = json.parent ?: return
     val versions = minecraftDirectory.toAbsolutePath().normalize().resolve("versions")
     val target = versionDir.toAbsolutePath().normalize()
     if (target.parent != versions) {
@@ -153,15 +177,40 @@ fun deleteVersionAlias(minecraftDirectory: Path, versionId: String) {
     deleteTreeIfExists(target)
 }
 
+private fun isLoaderVersionAlias(document: String, versionId: String): Boolean {
+    return try {
+        val id = ObjectMapper().readTree(document).get("id")
+        val inherits = loaderVersionAliasInherits(document)
+        id != null && id.isTextual && id.asText() == versionId && !inherits.isNullOrBlank() && inherits != versionId
+    } catch (exception: Exception) {
+        false
+    }
+}
+
 private fun deleteTreeIfExists(path: Path) {
-    if (Files.isSymbolicLink(path)) {
+    try {
+        if (Files.isSymbolicLink(path)) {
+            Files.deleteIfExists(path)
+            return
+        }
+        if (!Files.exists(path)) {
+            return
+        }
+        if (Files.isDirectory(path)) {
+            val directory = path.toAbsolutePath().normalize()
+            Files.list(path).use { children ->
+                children.forEach { child ->
+                    if (child.toAbsolutePath().normalize().parent != directory) {
+                        return@forEach
+                    }
+                    deleteTreeIfExists(child)
+                }
+            }
+        }
         Files.deleteIfExists(path)
-        return
+    } catch (exception: IOException) {
+        throw UserException("삭제하지 못했어요: $path", exception)
     }
-    if (!Files.exists(path)) {
-        return
-    }
-    path.toFile().deleteRecursively()
 }
 
 private fun ObjectNode.putAliasText(field: String, value: String): Boolean {

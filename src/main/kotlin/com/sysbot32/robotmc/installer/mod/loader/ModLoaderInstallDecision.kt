@@ -88,7 +88,7 @@ private fun installerUrl(type: ModLoaderType, loaderVersion: String): String = w
         "https://maven.fabricmc.net/net/fabricmc/fabric-installer/$FABRIC_INSTALLER_VERSION/fabric-installer-$FABRIC_INSTALLER_VERSION.jar"
 }
 
-private fun profileVersionId(
+fun profileVersionId(
     type: ModLoaderType,
     loaderVersion: String,
     minecraftVersion: String,
