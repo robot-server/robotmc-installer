@@ -7,7 +7,6 @@ import com.sysbot32.robotmc.installer.config.configFileName
 import com.sysbot32.robotmc.installer.config.deleteInstalledFile
 import com.sysbot32.robotmc.installer.config.gameDirectory
 import com.sysbot32.robotmc.installer.config.recordedNames
-import com.sysbot32.robotmc.installer.config.uninstallFileNames
 import com.sysbot32.robotmc.installer.progress.ProgressService
 import io.github.oshai.kotlinlogging.KotlinLogging
 import org.springframework.stereotype.Service
@@ -56,20 +55,9 @@ class ResourcePackInstallService(
     }
 
     override fun uninstall() {
-        val gameDir = installerProperties.gameDirectory()
-        val resourcePackDir = gameDir.resolve("resourcepacks").also { log.info { it } }
-        val configured = installerProperties.resourcePacks.map { configFileName(it.downloadUrl) }
-        val names = uninstallFileNames(
-            configured,
-            InstalledRecord.read(gameDir),
-            "resourcepacks",
-        )
-        for (fileName in names) {
-            this.progressService.setStatus("리소스 팩 삭제 중: $fileName")
-            deleteInstalledFile(resourcePackDir, fileName)
-            if (fileName in configured) {
-                this.progressService.step(-1)
-            }
+        val count = installerProperties.resourcePacks.size
+        if (count > 0) {
+            this.progressService.step(-count)
         }
     }
 }

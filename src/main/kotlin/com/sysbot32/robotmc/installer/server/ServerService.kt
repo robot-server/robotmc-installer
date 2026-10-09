@@ -57,7 +57,9 @@ class ServerService(
     override fun install() = this.addServers()
 
     override fun uninstall() {
-        this.progressService.setStatus("서버 목록 유지 중...")
-        this.progressService.step(-installerProperties.servers.size)
+        val count = installerProperties.servers.size
+        if (count > 0) {
+            this.progressService.step(-count)
+        }
     }
 }

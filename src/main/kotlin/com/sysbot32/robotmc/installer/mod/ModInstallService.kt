@@ -4,9 +4,7 @@ import com.sysbot32.robotmc.installer.InstallService
 import com.sysbot32.robotmc.installer.config.InstalledRecord
 import com.sysbot32.robotmc.installer.config.InstallerProperties
 import com.sysbot32.robotmc.installer.config.configFileName
-import com.sysbot32.robotmc.installer.config.deleteInstalledFile
 import com.sysbot32.robotmc.installer.config.gameDirectory
-import com.sysbot32.robotmc.installer.config.uninstallFileNames
 import com.sysbot32.robotmc.installer.progress.ProgressService
 import io.github.oshai.kotlinlogging.KotlinLogging
 import org.springframework.stereotype.Service
@@ -62,20 +60,9 @@ class ModInstallService(
     }
 
     override fun uninstall() {
-        val gameDir = installerProperties.gameDirectory()
-        val modsDir = gameDir.resolve("mods").also { log.info { it } }
-        val configured = (installerProperties.mod?.mods ?: listOf()).map { configFileName(it.downloadUrl) }
-        val names = uninstallFileNames(
-            configured,
-            InstalledRecord.read(gameDir),
-            "mods",
-        )
-        for (fileName in names) {
-            this.progressService.setStatus("모드 삭제 중: $fileName")
-            deleteInstalledFile(modsDir, fileName)
-            if (fileName in configured) {
-                this.progressService.step(-1)
-            }
+        val count = installerProperties.mod?.mods?.size ?: 0
+        if (count > 0) {
+            this.progressService.step(-count)
         }
     }
 }

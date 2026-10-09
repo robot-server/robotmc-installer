@@ -4,6 +4,8 @@ import com.sysbot32.robotmc.installer.InstallService
 import com.sysbot32.robotmc.installer.config.InstallerProperties
 import com.sysbot32.robotmc.installer.launcher.LauncherService
 import com.sysbot32.robotmc.installer.config.launcherVersionId
+import com.sysbot32.robotmc.installer.launcher.deleteGameDirectory
+import com.sysbot32.robotmc.installer.launcher.deleteVersionAlias
 import com.sysbot32.robotmc.installer.launcher.readLoaderVersionAliasInherits
 import com.sysbot32.robotmc.installer.launcher.writeLoaderVersionAlias
 import com.sysbot32.robotmc.installer.progress.ProgressService
@@ -114,7 +116,11 @@ class ModLoaderInstallService(
     }
 
     override fun uninstall() {
-        this.progressService.setStatus("모드 로더 제거 중...")
+        this.progressService.setStatus("프로필과 게임 폴더 제거 중...")
+        val minecraft = this.installerProperties.minecraft.directory
+        this.launcherService.removeConfiguredProfile()
+        deleteVersionAlias(minecraft, this.installerProperties.launcherVersionId())
+        deleteGameDirectory(minecraft, this.installerProperties.gameDirectoryName)
         this.progressService.step(-2)
     }
 }

@@ -286,6 +286,74 @@ class RobotMcProfileTest {
     }
 
     @Test
+    fun uninstallRemovesOnlyThisProfileVersionAndGameDirectory() {
+        val minecraft = Files.createTempDirectory("robotmc-profile").resolve("My Minecraft")
+        Files.createDirectories(minecraft)
+        val outside = minecraft.parent.resolve("outside-of-minecraft")
+        Files.createDirectories(outside)
+        Files.writeString(outside.resolve("keep.txt"), "outside")
+        val document = """
+            {
+              "settings": {"keepLauncherOpen": false},
+              "selectedProfile": "$DEFAULT_PROFILE_KEY",
+              "profiles": {
+                "NeoForge": {"name":"NeoForge","type":"custom","icon":"","lastVersionId":"neoforge-21.11.6-beta","gameDir":null,"javaArgs":"-Xmx4G"},
+                "personal-pack": {"name":"personal-pack","type":"custom","icon":"Bookshelf","lastVersionId":"neoforge-21.11.6-beta","gameDir":"/games/personal-pack"},
+                "$DEFAULT_PROFILE_KEY": {"name":"RobotMC","type":"custom","icon":"Grass","lastVersionId":"$DEFAULT_VERSION_ID","gameDir":"/old","javaArgs":"-Xmx2G"}
+              }
+            }
+        """.trimIndent()
+        Files.writeString(minecraft.resolve("launcher_profiles.json"), document)
+        val gameDir = gameDirectory(minecraft)
+        Files.createDirectories(gameDir.resolve("saves/World"))
+        Files.createDirectories(gameDir.resolve("mods"))
+        Files.writeString(gameDir.resolve("saves/World/level.dat"), "save")
+        Files.writeString(gameDir.resolve("mods/user.jar"), "user")
+        Files.writeString(gameDir.resolve("servers.dat"), "game-servers")
+        Files.createDirectories(minecraft.resolve("mods"))
+        Files.writeString(minecraft.resolve("mods/keep.jar"), "vanilla-mod")
+        Files.createDirectories(minecraft.resolve("saves/World"))
+        Files.writeString(minecraft.resolve("saves/World/level.dat"), "vanilla-save")
+        Files.writeString(minecraft.resolve("servers.dat"), "vanilla-servers")
+        Files.createDirectories(minecraft.resolve("versions/neoforge-21.11.6-beta"))
+        Files.writeString(minecraft.resolve("versions/neoforge-21.11.6-beta/neoforge-21.11.6-beta.json"), "loader")
+        writeLoaderVersionAlias(minecraft, "neoforge-21.11.6-beta")
+        val properties = InstallerProperties(
+            minecraft = InstallerProperties.Minecraft(version = "1.21.11", directory = minecraft),
+            mod = InstallerProperties.Mod(
+                loader = InstallerProperties.Mod.Loader(
+                    type = ModLoaderType.NEO_FORGE,
+                    version = "21.11.6-beta",
+                ),
+            ),
+            gameDirectoryName = "../outside-of-minecraft",
+        )
+        val service = ModLoaderInstallService(
+            LauncherService(properties, Jackson2ObjectMapperBuilder.json().build()),
+            RestClient.builder().requestFactory(RefusingRequests()).build(),
+            properties,
+            ProgressService(),
+        )
+
+        service.uninstall()
+
+        assertFalse(Files.exists(gameDir))
+        assertFalse(Files.exists(loaderVersionAliasPath(minecraft)))
+        assertEquals("loader", Files.readString(minecraft.resolve("versions/neoforge-21.11.6-beta/neoforge-21.11.6-beta.json")))
+        assertEquals("vanilla-mod", Files.readString(minecraft.resolve("mods/keep.jar")))
+        assertEquals("vanilla-save", Files.readString(minecraft.resolve("saves/World/level.dat")))
+        assertEquals("vanilla-servers", Files.readString(minecraft.resolve("servers.dat")))
+        assertEquals("outside", Files.readString(outside.resolve("keep.txt")))
+        val profiles = ObjectMapper().readTree(Files.readString(minecraft.resolve("launcher_profiles.json")))
+        assertEquals(false, profiles.get("settings").get("keepLauncherOpen").asBoolean())
+        assertTrue(profiles.get("selectedProfile") == null || profiles.get("selectedProfile").isNull)
+        assertEquals("NeoForge", profiles.get("profiles").get("NeoForge").get("name").asText())
+        assertEquals("-Xmx4G", profiles.get("profiles").get("NeoForge").get("javaArgs").asText())
+        assertEquals("/games/personal-pack", profiles.get("profiles").get("personal-pack").get("gameDir").asText())
+        assertTrue(profiles.get("profiles").get(DEFAULT_PROFILE_KEY) == null || profiles.get("profiles").get(DEFAULT_PROFILE_KEY).isNull)
+    }
+
+    @Test
     fun aliasMatchingTheLoaderSkipsTheInstaller() {
         val minecraft = Files.createTempDirectory("robotmc-profile").resolve("My Minecraft")
         Files.createDirectories(minecraft)

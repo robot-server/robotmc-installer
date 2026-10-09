@@ -137,6 +137,34 @@ fun editRobotMcLauncherProfile(
     return mapper.writeValueAsString(root)
 }
 
+/**
+ * [profileKey] 항목만 뺀다. 그 키가 선택된 프로필이면 선택도 뺀다.
+ * 다른 프로필과 최상위 필드는 둔다.
+ */
+fun removeLauncherProfile(document: String, profileKey: String): String {
+    val mapper = ObjectMapper()
+    val root = mapper.readTree(document)
+    val profiles = root.get("profiles")
+    if (root !is ObjectNode || profiles !is ObjectNode) {
+        return document
+    }
+    val key = pathSegment(profileKey, DEFAULT_PROFILE_KEY)
+    var changed = false
+    if (profiles.has(key)) {
+        profiles.remove(key)
+        changed = true
+    }
+    val selected = root.get("selectedProfile")
+    if (selected != null && selected.isTextual && selected.asText() == key) {
+        root.remove("selectedProfile")
+        changed = true
+    }
+    if (!changed) {
+        return document
+    }
+    return mapper.writeValueAsString(root)
+}
+
 private fun ObjectNode.putTextIfDifferent(field: String, value: String): Boolean {
     val current = this.get(field)
     if (current != null && current.isTextual && current.asText() == value) {

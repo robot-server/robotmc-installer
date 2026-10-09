@@ -1,5 +1,6 @@
 package com.sysbot32.robotmc.installer.launcher
 
+import com.sysbot32.robotmc.installer.config.gameDirectory
 import com.fasterxml.jackson.databind.ObjectMapper
 import com.fasterxml.jackson.databind.node.ObjectNode
 import com.sysbot32.robotmc.installer.config.DEFAULT_VERSION_ID
@@ -105,6 +106,43 @@ fun writeLoaderVersionAlias(
     if (edited != current) {
         Files.writeString(path, edited)
     }
+}
+
+/**
+ * 이 구성의 게임 폴더만 지운다. 마인크래프트 디렉터리와 그 옆의 폴더는 건드리지 않는다.
+ */
+fun deleteGameDirectory(minecraftDirectory: Path, directoryName: String) {
+    val gameDir = gameDirectory(minecraftDirectory, directoryName)
+    val minecraft = minecraftDirectory.toAbsolutePath().normalize()
+    val target = gameDir.toAbsolutePath().normalize()
+    if (target.parent != minecraft) {
+        return
+    }
+    deleteTreeIfExists(target)
+}
+
+/**
+ * versions/<versionId> 만 지운다. versions 폴더와 다른 버전은 둔다.
+ */
+fun deleteVersionAlias(minecraftDirectory: Path, versionId: String) {
+    val versionDir = loaderVersionAliasPath(minecraftDirectory, versionId).parent ?: return
+    val versions = minecraftDirectory.toAbsolutePath().normalize().resolve("versions")
+    val target = versionDir.toAbsolutePath().normalize()
+    if (target.parent != versions) {
+        return
+    }
+    deleteTreeIfExists(target)
+}
+
+private fun deleteTreeIfExists(path: Path) {
+    if (Files.isSymbolicLink(path)) {
+        Files.deleteIfExists(path)
+        return
+    }
+    if (!Files.exists(path)) {
+        return
+    }
+    path.toFile().deleteRecursively()
 }
 
 private fun ObjectNode.putAliasText(field: String, value: String): Boolean {

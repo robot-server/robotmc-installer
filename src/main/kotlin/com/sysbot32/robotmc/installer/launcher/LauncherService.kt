@@ -50,4 +50,18 @@ class LauncherService(
         Files.writeString(path, edited)
         log.info { "$path: $profileKey -> $profileName ($versionId, $gameDir)" }
     }
+
+    /**
+     * 이 구성의 프로필 키만 뺀다. 파일이 없으면 그냥 끝낸다.
+     */
+    fun removeConfiguredProfile(
+        path: Path = installerProperties.minecraft.directory.resolve("launcher_profiles.json"),
+    ) {
+        if (!path.exists()) {
+            return
+        }
+        val edited = removeLauncherProfile(Files.readString(path), installerProperties.launcherProfileKey())
+        Files.writeString(path, edited)
+        log.info { "$path: removed ${installerProperties.launcherProfileKey()}" }
+    }
 }

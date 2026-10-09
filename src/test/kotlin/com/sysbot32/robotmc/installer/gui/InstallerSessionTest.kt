@@ -38,7 +38,10 @@ class InstallerSessionTest {
             "서버 접속에 필요한 모드 로더 및 모드를 설치할까요?\n기존 설치 모드는 mods_old로 옮겨져요.",
             install.state.value.prompt,
         )
-        assertEquals("설치된 모드 로더 및 모드를 제거할까요?", uninstall.state.value.prompt)
+        assertEquals(
+            "이 설치의 프로필과 게임 폴더를 제거할까요?\n그 폴더의 세이브도 함께 지워져요.",
+            uninstall.state.value.prompt,
+        )
         assertEquals(SessionPhase.Confirm, install.state.value.phase)
         assertEquals(SessionPhase.Confirm, uninstall.state.value.phase)
     }
@@ -115,7 +118,10 @@ class InstallerSessionTest {
         val removed = session.state.value
         assertEquals(SessionPhase.Confirm, removed.phase)
         assertEquals(Mode.UNINSTALL, removed.mode)
-        assertEquals("설치된 모드 로더 및 모드를 제거할까요?", removed.prompt)
+        assertEquals(
+            "이 설치의 프로필과 게임 폴더를 제거할까요?\n그 폴더의 세이브도 함께 지워져요.",
+            removed.prompt,
+        )
         assertEquals(4, removed.completedSteps)
         assertEquals(1f, removed.fraction)
 
