@@ -252,6 +252,51 @@ class PrelaunchCheckTest {
     }
 
     @Test
+    fun agentExitsNonZeroWhenTheOptionsFileIsMissing() {
+        val classes = Files.createTempDirectory("robotmc-sentinel")
+        compileStandIns(classes)
+        val agent = Path.of(System.getProperty("robotmc.prelaunch.agent"))
+        val missing = Files.createTempDirectory("robotmc-missing").resolve("no-options.properties")
+        val command = listOf(
+            installerJavaExecutable(),
+            "-javaagent:${agent.toAbsolutePath()}=${missing.toAbsolutePath()}",
+            "-cp",
+            classes.toString(),
+            "SentinelMain",
+        )
+        val out = Files.createTempFile("robotmc-out", ".txt")
+        val err = Files.createTempFile("robotmc-err", ".txt")
+        val process = ProcessBuilder(command)
+            .redirectOutput(out.toFile())
+            .redirectError(err.toFile())
+            .start()
+        assertTrue(process.waitFor(30, TimeUnit.SECONDS))
+        assertEquals(PrelaunchAgent.EXIT_OPTIONS_UNREADABLE, 1)
+        assertEquals(1, process.exitValue())
+        assertFalse(Files.readString(out).contains("SENTINEL_MAIN_RAN"))
+        assertTrue(Files.readString(err).contains("실행 전 검사를 읽지 못해서"))
+    }
+
+    @Test
+    fun agentExitCodeTellsACrashReportWhyTheInstallerDidNotStart() {
+        assertEquals(0, PrelaunchAgent.EXIT_INSTALLER_STARTED)
+        assertEquals(2, PrelaunchAgent.EXIT_CHECK_FAILED)
+        assertEquals(3, PrelaunchAgent.EXIT_INSTALLER_NOT_STARTED)
+        val classes = Files.createTempDirectory("robotmc-sentinel")
+        compileStandIns(classes)
+        val checkFailed = runAgent(classes, brokenCheck = true)
+        val installerMissing = runAgent(classes, brokenCheck = false)
+        assertEquals(2, checkFailed.exit)
+        assertEquals(3, installerMissing.exit)
+        assertFalse(checkFailed.stdout.contains("SENTINEL_MAIN_RAN"))
+        assertFalse(installerMissing.stdout.contains("SENTINEL_MAIN_RAN"))
+        assertTrue(checkFailed.stderr.contains("실행 전 검사를 끝내지 못해서"))
+        assertTrue(installerMissing.stderr.contains("로더 또는 모드가 원격 구성과 달라서"))
+        assertTrue(checkFailed.stderr.contains("설치기를 실행하지 못했어요."))
+        assertTrue(installerMissing.stderr.contains("설치기를 실행하지 못했어요."))
+    }
+
+    @Test
     fun agentReturnsOnMatchAndExitsAfterTheInstallerOnMismatch() {
         val classes = Files.createTempDirectory("robotmc-sentinel")
         compileStandIns(classes)
@@ -264,8 +309,8 @@ class PrelaunchCheckTest {
         assertFalse(match.first.marker)
         assertFalse(match.second.marker)
         assertFalse(match.first.stdout.contains("SENTINEL_MAIN_RAN") && match.first.stderr.contains("설치기를 실행해요."))
-        assertTrue(mismatch.first.exit != 0)
-        assertEquals(mismatch.first.exit, mismatch.second.exit)
+        assertEquals(0, mismatch.first.exit)
+        assertEquals(0, mismatch.second.exit)
         assertFalse(mismatch.first.stdout.contains("SENTINEL_MAIN_RAN"))
         assertFalse(mismatch.second.stdout.contains("SENTINEL_MAIN_RAN"))
         assertTrue(mismatch.first.marker)
@@ -322,6 +367,54 @@ class PrelaunchCheckTest {
         val second = runGame(javaArgs, gameDir, classes, marker)
         recordRun(if (match) "match" else "mismatch", 2, second)
         return first to second
+    }
+
+    private fun runAgent(classes: Path, brokenCheck: Boolean): GameRun {
+        val root = Files.createTempDirectory("robotmc-exit")
+        val minecraft = root.resolve("minecraft")
+        val gameDir = gameDirectory(minecraft)
+        Files.createDirectories(minecraft)
+        Files.createDirectories(gameDir.resolve("mods"))
+        val yaml = applicationYaml("neo_forge", "21.11.6-beta", "1.21.11", listOf("iris.jar"))
+        val bundled = root.resolve("bundled.yml")
+        Files.writeString(bundled, yaml)
+        if (!brokenCheck) {
+            Files.writeString(minecraft.resolve("launcher_profiles.json"), profiles(gameDir, "RobotMC", null))
+            writeJars(gameDir.resolve("mods"), listOf("other.jar"))
+        }
+        val options = root.resolve("options.properties")
+        AgentOptions(
+            minecraft,
+            "robotmc",
+            "",
+            root.resolve("no-cache.yml"),
+            bundled,
+            listOf(root.resolve("missing-installer").toString()),
+        ).write(options)
+        val agent = Path.of(System.getProperty("robotmc.prelaunch.agent"))
+        val out = Files.createTempFile("robotmc-out", ".txt")
+        val err = Files.createTempFile("robotmc-err", ".txt")
+        val process = ProcessBuilder(
+            listOf(
+                installerJavaExecutable(),
+                "-javaagent:${agent.toAbsolutePath()}=${options.toAbsolutePath()}",
+                "-cp",
+                classes.toString(),
+                "SentinelMain",
+            ),
+        )
+            .directory(gameDir.toFile())
+            .redirectOutput(out.toFile())
+            .redirectError(err.toFile())
+            .start()
+        val finished = process.waitFor(30, TimeUnit.SECONDS)
+        return GameRun(
+            command = emptyList(),
+            exit = if (finished) process.exitValue() else -1,
+            stdout = Files.readString(out),
+            stderr = Files.readString(err),
+            marker = false,
+        )
     }
 
     private fun runGame(javaArgs: String, cwd: Path, sentinelCp: Path, marker: Path): GameRun {

@@ -11,6 +11,18 @@ import java.util.concurrent.TimeUnit
  */
 class PrelaunchAgent private constructor() {
     companion object {
+        /**
+         * 런처 충돌 제보에 찍히는 종료 코드.
+         * 0은 설치기를 실행한 정상 종료라 제보 창이 뜨지 않는다.
+         * 1은 검사 설정을 읽지 못했다.
+         * 2는 비교를 끝내지 못했고 설치기도 시작하지 못했다.
+         * 3은 구성이 달랐는데 설치기를 시작하지 못했다.
+         */
+        const val EXIT_INSTALLER_STARTED = 0
+        const val EXIT_OPTIONS_UNREADABLE = 1
+        const val EXIT_CHECK_FAILED = 2
+        const val EXIT_INSTALLER_NOT_STARTED = 3
+
         @JvmStatic
         fun premain(agentArgs: String?, instrumentation: Instrumentation) {
             val options = try {
@@ -18,31 +30,40 @@ class PrelaunchAgent private constructor() {
             } catch (exception: Exception) {
                 System.err.println("실행 전 검사를 읽지 못해서 게임을 시작하지 않아요.")
                 System.err.flush()
-                Runtime.getRuntime().halt(2)
+                Runtime.getRuntime().halt(EXIT_OPTIONS_UNREADABLE)
                 return
             }
-            val match = try {
+            val checkFailed = try {
                 val yaml = loadRemoteConfig(options.manifestUrl, options.cacheFile, options.bundledFile)
-                checkLaunchConfig(options.minecraftDirectory, options.profileKey, yaml).match
+                if (checkLaunchConfig(options.minecraftDirectory, options.profileKey, yaml).match) {
+                    return
+                }
+                false
             } catch (exception: Exception) {
                 System.err.println("실행 전 검사를 끝내지 못해서 설치기를 실행해요.")
-                false
+                true
             }
-            if (match) {
-                return
+            if (!checkFailed) {
+                System.err.println("로더 또는 모드가 원격 구성과 달라서 설치기를 실행해요.")
             }
-            System.err.println("로더 또는 모드가 원격 구성과 달라서 설치기를 실행해요.")
-            try {
+            val installerStarted = try {
                 val process = ProcessBuilder(options.installerCommand)
                     .redirectOutput(ProcessBuilder.Redirect.DISCARD)
                     .redirectError(ProcessBuilder.Redirect.DISCARD)
                     .start()
                 process.waitFor(5, TimeUnit.SECONDS)
+                true
             } catch (exception: Exception) {
                 System.err.println("설치기를 실행하지 못했어요.")
+                false
             }
             System.err.flush()
-            Runtime.getRuntime().halt(2)
+            val exitCode = when {
+                installerStarted -> EXIT_INSTALLER_STARTED
+                checkFailed -> EXIT_CHECK_FAILED
+                else -> EXIT_INSTALLER_NOT_STARTED
+            }
+            Runtime.getRuntime().halt(exitCode)
         }
     }
 }
