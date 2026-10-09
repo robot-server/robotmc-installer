@@ -1,5 +1,8 @@
 package com.sysbot32.robotmc.installer.config
 
+import com.sysbot32.robotmc.installer.update.INSTALLER_OS_KEYS
+import com.sysbot32.robotmc.installer.update.validHttpsUrl
+import com.sysbot32.robotmc.installer.update.validSha256
 import io.github.oshai.kotlinlogging.KotlinLogging
 import org.springframework.boot.context.properties.bind.Bindable
 import org.springframework.boot.context.properties.bind.Binder
@@ -26,12 +29,10 @@ import java.util.concurrent.TimeoutException
 
 private val log = KotlinLogging.logger { }
 
-private val SHA256 = Regex("^[0-9a-fA-F]{64}$")
-
 /**
  * 시작 시 원격 YAML로 installer 구성을 덮어쓴다.
  * [InstallerProperties.Update.manifestUrl] 은 이 JAR의 값만 쓰고, 원격 값으로 바꾸지 않는다.
- * [InstallerProperties.Update.App] 은 나중 설치기 교체용으로 실어 나르기만 한다.
+ * [InstallerProperties.Update.App] 은 OS별 설치기 파일 주소와 SHA-256 을 실어 나른다.
  */
 class RemoteInstallerConfig(
     private val manifestUrl: String,
@@ -285,25 +286,26 @@ private fun linkedMap(source: Map<*, *>): LinkedHashMap<String, Any?> {
     return copy
 }
 
-private fun appFields(update: Map<*, *>): LinkedHashMap<String, String>? {
+private fun appFields(update: Map<*, *>): LinkedHashMap<String, Any?>? {
     val app = update["app"] as? Map<*, *> ?: return null
-    val kept = LinkedHashMap<String, String>()
-    for (key in listOf("version", "url", "sha256")) {
-        val value = app[key]?.toString()?.trim().orEmpty()
-        if (value.isEmpty() || !isAppField(key, value)) {
+    val kept = LinkedHashMap<String, Any?>()
+    val version = app["version"]?.toString()?.trim().orEmpty()
+    if (version.isNotEmpty()) {
+        kept["version"] = version
+    }
+    for (os in INSTALLER_OS_KEYS) {
+        val entry = app[os] as? Map<*, *> ?: continue
+        val url = entry["url"]?.toString()?.trim().orEmpty()
+        val sha = entry["sha256"]?.toString()?.trim().orEmpty()
+        if (!validHttpsUrl(url) || !validSha256(sha)) {
             continue
         }
-        kept[key] = value
+        val artifact = LinkedHashMap<String, String>()
+        artifact["url"] = url
+        artifact["sha256"] = sha
+        kept[os] = artifact
     }
     return kept.takeIf { it.isNotEmpty() }
-}
-
-private fun isAppField(key: String, value: String): Boolean {
-    return when (key) {
-        "url" -> value.startsWith("https://")
-        "sha256" -> value.matches(SHA256)
-        else -> true
-    }
 }
 
 private fun yaml(): Yaml {

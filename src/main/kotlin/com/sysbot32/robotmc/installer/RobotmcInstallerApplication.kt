@@ -6,6 +6,7 @@ import com.sysbot32.robotmc.installer.config.RemoteInstallerConfig
 import com.sysbot32.robotmc.installer.gui.InstallerSession
 import com.sysbot32.robotmc.installer.gui.InstallerWindow
 import com.sysbot32.robotmc.installer.prelaunch.LAUNCHER_RESTART_DETAIL
+import com.sysbot32.robotmc.installer.update.armRunningInstallerUpdate
 import com.sysbot32.robotmc.installer.prelaunch.installerLaunchCommand
 import com.sysbot32.robotmc.installer.progress.ProgressService
 import com.sysbot32.robotmc.installer.progress.plannedSteps
@@ -44,6 +45,9 @@ fun main(args: Array<String>) {
     }
     val context = runApplication<RobotmcInstallerApplication>(*startupArguments(args, resolved))
     val properties = context.getBean(InstallerProperties::class.java)
+    // 버전이 다르면 받아 두고, 이 프로세스가 끝난 뒤에 교체한다. 실패해도 설치와 제거는 그대로다.
+    runCatching { armRunningInstallerUpdate(properties) }
+        .onFailure { log.warn(it) { "Installer update was not armed" } }
     val progress = context.getBean(ProgressService::class.java)
     val installer = context.getBean(MainInstallService::class.java)
     log.info { "mode: ${properties.mode}" }

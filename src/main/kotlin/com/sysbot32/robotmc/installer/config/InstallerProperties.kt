@@ -3,6 +3,7 @@ package com.sysbot32.robotmc.installer.config
 import com.sysbot32.robotmc.installer.mod.loader.ModLoaderType
 import com.sysbot32.robotmc.installer.exception.UserException
 import com.sysbot32.robotmc.installer.server.ServersDat
+import com.sysbot32.robotmc.installer.update.installerArtifact
 import org.springframework.boot.context.properties.ConfigurationProperties
 import java.nio.file.Path
 import java.nio.file.Paths
@@ -103,15 +104,21 @@ data class InstallerProperties(
         val source: String = "",
         /**
          * 원격 구성이 설치기 교체 정보를 실어 보내는 자리.
-         * 값은 읽어 두기만 하고 JAR는 바꾸지 않는다.
+         * version 과 OS별 url, sha256 이 있고 지금 버전과 다르면, 이 프로세스가 끝난 뒤에 그 파일로 바꾼다.
          */
         val app: App = App(),
     ) {
         data class App(
             val version: String = "",
-            val url: String = "",
-            val sha256: String = "",
-        )
+            val windows: Artifact = Artifact(),
+            val macos: Artifact = Artifact(),
+            val linux: Artifact = Artifact(),
+        ) {
+            data class Artifact(
+                val url: String = "",
+                val sha256: String = "",
+            )
+        }
     }
 }
 
@@ -180,11 +187,14 @@ fun pathSegment(value: String, fallback: String): String {
 }
 
 /**
- * version, url, sha256 이 모두 있을 때만 설치기 교체 후보로 본다.
+ * 이 OS의 https URL 과 64자리 SHA-256 이 있을 때만 설치기 교체 후보로 본다.
+ * 예전 공통 url, sha256 은 후보가 아니다.
  */
-fun InstallerProperties.pendingAppUpdate(): InstallerProperties.Update.App? {
+fun InstallerProperties.pendingAppUpdate(
+    osName: String = System.getProperty("os.name", ""),
+): InstallerProperties.Update.App? {
     val app = this.update.app
-    if (app.version.isBlank() || app.url.isBlank() || app.sha256.isBlank()) {
+    if (app.version.isBlank() || installerArtifact(app, osName) == null) {
         return null
     }
     return app
