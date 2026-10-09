@@ -125,6 +125,31 @@ class ModLoaderInstallDecisionTest {
         assertEquals("fabric-loader-0.16.14-1.21.11", fabric.profileVersionId)
         assertEquals(minecraft.toString(), fabric.arguments[fabric.arguments.indexOf("-dir") + 1])
         assertFalse(fabric.arguments.contains(gameDir.toString()))
+
+        val aliasSkips = decideModLoaderInstall(
+            type = ModLoaderType.NEO_FORGE,
+            loaderVersion = "21.11.6-beta",
+            minecraftVersion = "1.21.11",
+            minecraftDirectory = minecraft,
+            installOptions = listOf("--install-client"),
+            profiles = profiles(),
+            installerDirectory = installerDirectory,
+            aliasInheritsFrom = "neoforge-21.11.6-beta",
+        )
+        assertFalse(aliasSkips.runInstaller)
+        assertEquals(minecraft.toString(), aliasSkips.arguments[aliasSkips.arguments.indexOf("--install-client") + 1])
+
+        val aliasMismatch = decideModLoaderInstall(
+            type = ModLoaderType.NEO_FORGE,
+            loaderVersion = "21.11.6-beta",
+            minecraftVersion = "1.21.11",
+            minecraftDirectory = minecraft,
+            installOptions = listOf("--install-client"),
+            profiles = profiles(),
+            installerDirectory = installerDirectory,
+            aliasInheritsFrom = "neoforge-old",
+        )
+        assertTrue(aliasMismatch.runInstaller)
     }
 
     @Test

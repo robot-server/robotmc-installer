@@ -88,12 +88,12 @@ const val ROBOTMC_PROFILE_KEY = "robotmc"
 
 /**
  * 키 [ROBOTMC_PROFILE_KEY] 프로필만 만들거나 고친다.
- * lastVersionId 는 로더가 설치한 버전 id 그대로다. 다른 프로필은 건드리지 않는다.
+ * lastVersionId 는 [ROBOTMC_VERSION_ID] 다. 로더 버전은 versions/RobotMC JSON 이 가리킨다.
+ * 다른 프로필은 건드리지 않는다.
  * 데이터 클래스로 다시 쓰면 settings, 계정, 모르는 프로필 필드가 빠진다.
  */
 fun editRobotMcLauncherProfile(
     document: String,
-    profileVersionId: String,
     gameDirectory: Path,
     profileName: String,
 ): String {
@@ -120,7 +120,7 @@ fun editRobotMcLauncherProfile(
     if (profile.putTextIfDifferent("name", profileName)) {
         changed = true
     }
-    if (profile.putTextIfDifferent("lastVersionId", profileVersionId)) {
+    if (profile.putTextIfDifferent("lastVersionId", ROBOTMC_VERSION_ID)) {
         changed = true
     }
     if (profile.putTextIfDifferent("gameDir", gameDir)) {

@@ -3,6 +3,8 @@ package com.sysbot32.robotmc.installer.mod.loader
 import com.sysbot32.robotmc.installer.InstallService
 import com.sysbot32.robotmc.installer.config.InstallerProperties
 import com.sysbot32.robotmc.installer.launcher.LauncherService
+import com.sysbot32.robotmc.installer.launcher.readLoaderVersionAliasInherits
+import com.sysbot32.robotmc.installer.launcher.writeLoaderVersionAlias
 import com.sysbot32.robotmc.installer.progress.ProgressService
 import io.github.oshai.kotlinlogging.KotlinLogging
 import org.apache.commons.exec.DefaultExecutor
@@ -79,6 +81,7 @@ class ModLoaderInstallService(
             installOptions = loader?.installOptions.orEmpty(),
             profiles = this.launcherService.getProfiles(),
             installerDirectory = this.installerDirectory,
+            aliasInheritsFrom = readLoaderVersionAliasInherits(this.installerProperties.minecraft.directory),
         )
         val installerPath = decision.installerJar
         if (!Files.exists(installerPath)) {
@@ -96,8 +99,9 @@ class ModLoaderInstallService(
         if (decision.runInstaller) {
             executeModLoaderCommand(decision.arguments)
         }
-        // 로더가 만든 프로필은 그대로 두고, RobotMC 프로필만 맞춘다.
-        this.launcherService.applyRobotMcProfile(decision.profileVersionId)
+        // 로더 프로필은 그대로 둔다. RobotMC 는 버전 별칭과 그 프로필만 맞춘다.
+        writeLoaderVersionAlias(this.installerProperties.minecraft.directory, decision.profileVersionId)
+        this.launcherService.applyRobotMcProfile()
         this.progressService.step()
     }
 

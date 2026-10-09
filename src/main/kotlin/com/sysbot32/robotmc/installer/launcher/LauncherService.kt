@@ -32,13 +32,12 @@ class LauncherService(
      * NeoForge, Fabric, 사용자가 만든 프로필은 그대로 둔다.
      */
     fun applyRobotMcProfile(
-        profileVersionId: String,
         path: Path = installerProperties.minecraft.directory.resolve("launcher_profiles.json"),
     ) {
         val gameDir = gameDirectory(installerProperties.minecraft.directory)
         val profileName = installerProperties.profileDisplayName()
-        val edited = editRobotMcLauncherProfile(Files.readString(path), profileVersionId, gameDir, profileName)
+        val edited = editRobotMcLauncherProfile(Files.readString(path), gameDir, profileName)
         Files.writeString(path, edited)
-        log.info { "$path: $profileVersionId -> $profileName ($gameDir)" }
+        log.info { "$path: $ROBOTMC_PROFILE_KEY -> $profileName ($ROBOTMC_VERSION_ID, $gameDir)" }
     }
 }

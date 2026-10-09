@@ -37,6 +37,7 @@ fun decideModLoaderInstall(
     installOptions: List<String>,
     profiles: LauncherProfilesJson,
     installerDirectory: Path = defaultModLoaderInstallerDirectory(),
+    aliasInheritsFrom: String? = null,
 ): ModLoaderInstallDecision {
     if (type == null) {
         throw IllegalArgumentException("Unsupported mod loader type null")
@@ -50,7 +51,8 @@ fun decideModLoaderInstall(
     val installerJar = modLoaderInstallerJar(installerUrl, installerDirectory)
     val arguments = listOf("java", "-jar", installerJar.toString()) +
         installerArguments(type, loaderVersion, minecraftVersion, minecraftDirectory, installOptions)
-    val alreadyInstalled = profiles.profiles.values.any { it.lastVersionId == profileVersionId }
+    val alreadyInstalled = profiles.profiles.values.any { it.lastVersionId == profileVersionId } ||
+        aliasInheritsFrom == profileVersionId
     return ModLoaderInstallDecision(
         installerUrl = installerUrl,
         installerJar = installerJar,

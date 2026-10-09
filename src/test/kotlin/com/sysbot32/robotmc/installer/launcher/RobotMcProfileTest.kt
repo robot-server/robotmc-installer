@@ -69,7 +69,7 @@ class RobotMcProfileTest {
             }}
         """.trimIndent()
 
-        val edited = editRobotMcLauncherProfile(document, "neoforge-21.11.6-beta", gameDirectory(minecraft), "RobotMC")
+        val edited = editRobotMcLauncherProfile(document, gameDirectory(minecraft), "RobotMC")
 
         val mapper = ObjectMapper()
         val before = mapper.readTree(document).get("profiles")
@@ -78,9 +78,8 @@ class RobotMcProfileTest {
         assertEquals(before.get("personal-pack"), after.get("personal-pack"))
         val ours = after.get(ROBOTMC_PROFILE_KEY)
         assertEquals("RobotMC", ours.get("name").asText())
-        assertEquals("neoforge-21.11.6-beta", ours.get("lastVersionId").asText())
+        assertEquals(ROBOTMC_VERSION_ID, ours.get("lastVersionId").asText())
         assertEquals(gameDirectory(minecraft).toString(), ours.get("gameDir").asText())
-        assertNotEquals("RobotMC", ours.get("lastVersionId").asText())
         assertEquals("Grass", ours.get("icon").asText())
         assertEquals("2020-01-01T00:00:00Z", ours.get("created").asText())
         assertEquals("-Xmx2G", ours.get("javaArgs").asText())
@@ -112,7 +111,7 @@ class RobotMcProfileTest {
         Files.createDirectories(minecraft)
         val document = profilesDocument(profileKey, visibleName, lastVersionId)
 
-        val edited = editRobotMcLauncherProfile(document, lastVersionId, gameDirectory(minecraft), "RobotMC")
+        val edited = editRobotMcLauncherProfile(document, gameDirectory(minecraft), "RobotMC")
 
         assertProfile(minecraft, document, edited, profileKey, visibleName, lastVersionId, "RobotMC")
     }
@@ -211,6 +210,61 @@ class RobotMcProfileTest {
         assertDirectoryArgument(skipped.arguments, directoryFlag, minecraft)
         assertEquals(placed.installerJar, skipped.installerJar)
         assertTrue(Files.isRegularFile(placed.installerJar))
+        val alias = loaderVersionAliasPath(minecraft)
+        assertTrue(Files.isRegularFile(alias))
+        assertEquals(lastVersionId, loaderVersionAliasInherits(Files.readString(alias)))
+        assertEquals(ROBOTMC_VERSION_ID, ObjectMapper().readTree(Files.readString(alias)).get("id").asText())
+        assertFalse(Files.exists(expectedGameDir(minecraft).resolve("versions")))
+    }
+
+    @Test
+    fun aliasMatchingTheLoaderSkipsTheInstaller() {
+        val minecraft = Files.createTempDirectory("robotmc-profile").resolve("My Minecraft")
+        Files.createDirectories(minecraft)
+        Files.writeString(
+            minecraft.resolve("launcher_profiles.json"),
+            """{"profiles":{"vanilla":{"name":"Latest Release","type":"latest-release","icon":"Grass","lastVersionId":"latest-release"}}}""",
+        )
+        writeLoaderVersionAlias(minecraft, "neoforge-21.11.6-beta")
+        val jarDirectory = Files.createTempDirectory("robotmc-jars")
+        val properties = InstallerProperties(
+            minecraft = InstallerProperties.Minecraft(version = "1.21.11", directory = minecraft),
+            mod = InstallerProperties.Mod(
+                loader = InstallerProperties.Mod.Loader(
+                    type = ModLoaderType.NEO_FORGE,
+                    version = "21.11.6-beta",
+                    installOptions = listOf("--install-client"),
+                ),
+            ),
+        )
+        val placed = decideModLoaderInstall(
+            type = ModLoaderType.NEO_FORGE,
+            loaderVersion = "21.11.6-beta",
+            minecraftVersion = "1.21.11",
+            minecraftDirectory = minecraft,
+            installOptions = listOf("--install-client"),
+            profiles = LauncherProfilesJson(profiles = emptyMap()),
+            installerDirectory = jarDirectory,
+            aliasInheritsFrom = "neoforge-21.11.6-beta",
+        )
+        Files.write(placed.installerJar, byteArrayOf(1))
+        assertFalse(placed.runInstaller)
+        val service = ModLoaderInstallService(
+            LauncherService(properties, Jackson2ObjectMapperBuilder.json().build()),
+            RestClient.builder().requestFactory(RefusingRequests()).build(),
+            properties,
+            ProgressService(),
+        )
+        service.installerDirectory = jarDirectory
+
+        service.install()
+
+        val written = ObjectMapper().readTree(Files.readString(minecraft.resolve("launcher_profiles.json")))
+        val robotmc = written.get("profiles").get(ROBOTMC_PROFILE_KEY)
+        assertEquals(ROBOTMC_VERSION_ID, robotmc.get("lastVersionId").asText())
+        assertEquals("RobotMC", robotmc.get("name").asText())
+        assertEquals("latest-release", written.get("profiles").get("vanilla").get("lastVersionId").asText())
+        assertEquals("neoforge-21.11.6-beta", readLoaderVersionAliasInherits(minecraft))
     }
 
     private fun assertDirectoryArgument(arguments: List<String>, flag: String, minecraft: Path) {
@@ -250,8 +304,7 @@ class RobotMcProfileTest {
 
         val robotmc = afterProfiles.get(ROBOTMC_PROFILE_KEY)
         assertEquals(expectedProfileName, robotmc.get("name").asText())
-        assertEquals(lastVersionId, robotmc.get("lastVersionId").asText())
-        assertNotEquals(expectedProfileName, robotmc.get("lastVersionId").asText())
+        assertEquals(ROBOTMC_VERSION_ID, robotmc.get("lastVersionId").asText())
         assertEquals("custom", robotmc.get("type").asText())
         assertTrue(robotmc.get("icon").isTextual)
         assertTrue(robotmc.get("created").isTextual)
