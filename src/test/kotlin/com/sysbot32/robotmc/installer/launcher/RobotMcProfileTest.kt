@@ -83,9 +83,33 @@ class RobotMcProfileTest {
         Files.createDirectories(minecraft)
         val document = profilesDocument(profileKey, visibleName, lastVersionId)
 
-        val edited = editRobotMcLauncherProfile(document, lastVersionId, gameDirectory(minecraft))
+        val edited = editRobotMcLauncherProfile(document, lastVersionId, gameDirectory(minecraft), "RobotMC")
 
-        assertProfile(minecraft, document, edited, profileKey, visibleName, lastVersionId)
+        assertProfile(minecraft, document, edited, profileKey, visibleName, lastVersionId, "RobotMC")
+    }
+
+    @Test
+    fun configuredProfileNameIsWrittenAndABlankNameStaysRobotMc() {
+        installAlreadyPresent(
+            type = ModLoaderType.NEO_FORGE,
+            loaderVersion = "21.11.6-beta",
+            profileKey = "NeoForge",
+            visibleName = "NeoForge",
+            lastVersionId = "neoforge-21.11.6-beta",
+            directoryFlag = "--install-client",
+            profileName = "Pack From Config",
+            expectedProfileName = "Pack From Config",
+        )
+        installAlreadyPresent(
+            type = ModLoaderType.FABRIC,
+            loaderVersion = "0.16.14",
+            profileKey = "fabric-loader-1.21.11",
+            visibleName = "fabric-loader-0.16.14-1.21.11",
+            lastVersionId = "fabric-loader-0.16.14-1.21.11",
+            directoryFlag = "-dir",
+            profileName = "   ",
+            expectedProfileName = "RobotMC",
+        )
     }
 
     private fun installAlreadyPresent(
@@ -95,6 +119,8 @@ class RobotMcProfileTest {
         visibleName: String,
         lastVersionId: String,
         directoryFlag: String,
+        profileName: String = "RobotMC",
+        expectedProfileName: String = "RobotMC",
     ) {
         val minecraft = Files.createTempDirectory("robotmc-profile").resolve("My Minecraft")
         Files.createDirectories(minecraft)
@@ -111,6 +137,7 @@ class RobotMcProfileTest {
                     installOptions = listOf("--install-client"),
                 ),
             ),
+            profileName = profileName,
         )
         val placed = decideModLoaderInstall(
             type = type,
@@ -138,7 +165,7 @@ class RobotMcProfileTest {
         service.install()
 
         val written = Files.readString(profilesPath)
-        assertProfile(minecraft, document, written, profileKey, visibleName, lastVersionId)
+        assertProfile(minecraft, document, written, profileKey, visibleName, lastVersionId, expectedProfileName)
         assertFalse(Files.exists(expectedGameDir(minecraft).resolve("launcher_profiles.json")))
         val reread = LauncherService(properties, Jackson2ObjectMapperBuilder.json().build()).getProfiles()
         val skipped = decideModLoaderInstall(
@@ -169,6 +196,7 @@ class RobotMcProfileTest {
         profileKey: String,
         visibleName: String,
         lastVersionId: String,
+        expectedProfileName: String,
     ) {
         val mapper = ObjectMapper()
         val original = mapper.readTree(before)
@@ -195,9 +223,9 @@ class RobotMcProfileTest {
             assertEquals(beforeProfile.get(field), afterProfile.get(field), field)
         }
         assertEquals(visibleName, beforeProfile.get("name").asText())
-        assertEquals("RobotMC", afterProfile.get("name").asText())
+        assertEquals(expectedProfileName, afterProfile.get("name").asText())
         assertEquals(lastVersionId, afterProfile.get("lastVersionId").asText())
-        assertNotEquals("RobotMC", afterProfile.get("lastVersionId").asText())
+        assertNotEquals(expectedProfileName, afterProfile.get("lastVersionId").asText())
         assertEquals("data:image/png;base64,AAAA", afterProfile.get("icon").asText())
         assertEquals("-Xmx4G -XX:+UseG1GC", afterProfile.get("javaArgs").asText())
         assertEquals("2024-01-02T03:04:05.000Z", afterProfile.get("created").asText())

@@ -29,6 +29,46 @@ import kotlin.test.assertTrue
 
 class RemoteInstallerConfigTest {
     @Test
+    fun profileNameUsesTheConfiguredValueAndFallsBackWhenBlank() {
+        assertEquals(
+            "Pack From Config",
+            bindInstaller(
+                """
+                installer:
+                  profile-name: "  Pack From Config  "
+                  minecraft:
+                    version: "1.21.11"
+                """.trimIndent(),
+            ).profileDisplayName(),
+        )
+        assertEquals(
+            DEFAULT_PROFILE_NAME,
+            bindInstaller(
+                """
+                installer:
+                  profile-name: " "
+                  minecraft:
+                    version: "1.21.11"
+                """.trimIndent(),
+            ).profileDisplayName(),
+        )
+        assertEquals(
+            DEFAULT_PROFILE_NAME,
+            bindInstaller(
+                """
+                installer:
+                  minecraft:
+                    version: "1.21.11"
+                """.trimIndent(),
+            ).profileDisplayName(),
+        )
+        val bundled = readBundledYaml()
+        val configured = ((Yaml().load(bundled) as Map<*, *>)["installer"] as Map<*, *>)["profile-name"].toString()
+        assertEquals(configured, bindInstaller(bundled).profileName)
+        assertEquals(DEFAULT_PROFILE_NAME, configured)
+    }
+
+    @Test
     fun bundledManifestPointsAtMainApplicationYml() {
         assertEquals(MAIN_MANIFEST, manifestUrl(readBundledYaml()))
     }
@@ -55,6 +95,7 @@ class RemoteInstallerConfigTest {
         withStartup(first!!) { context ->
             val properties = context.getBean(InstallerProperties::class.java)
             assertEquals("1.21.12", properties.minecraft.version)
+            assertEquals("Remote Pack", properties.profileDisplayName())
             assertEquals(ModLoaderType.FABRIC, properties.mod?.loader?.type)
             assertEquals("0.16.0", properties.mod?.loader?.version)
             assertEquals(listOf("https://cdn.modrinth.com/data/only/one.jar"), properties.mod?.mods?.map { it.downloadUrl })
@@ -484,6 +525,7 @@ installer:
       version: "1.2.0"
       url: https://example.com/robotmc-installer.jar
       sha256: $SHA
+  profile-name: Remote Pack
   minecraft:
     version: "1.21.12"
   mod:

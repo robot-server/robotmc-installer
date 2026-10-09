@@ -5,8 +5,6 @@ import com.fasterxml.jackson.databind.node.ObjectNode
 import java.nio.file.Path
 import java.time.OffsetDateTime
 
-const val ROBOTMC_PROFILE_NAME = "RobotMC"
-
 /**
  * https://minecraft.fandom.com/wiki/Launcher_profiles.json
  */
@@ -93,6 +91,7 @@ fun editRobotMcLauncherProfile(
     document: String,
     profileVersionId: String,
     gameDirectory: Path,
+    profileName: String,
 ): String {
     val mapper = ObjectMapper()
     val root = mapper.readTree(document)
@@ -113,12 +112,12 @@ fun editRobotMcLauncherProfile(
         }
         val name = profile.get("name")
         val directory = profile.get("gameDir")
-        val alreadyNamed = name != null && name.isTextual && name.asText() == ROBOTMC_PROFILE_NAME
+        val alreadyNamed = name != null && name.isTextual && name.asText() == profileName
         val alreadyPlaced = directory != null && directory.isTextual && directory.asText() == gameDir
         if (alreadyNamed && alreadyPlaced) {
             continue
         }
-        profile.put("name", ROBOTMC_PROFILE_NAME)
+        profile.put("name", profileName)
         profile.put("gameDir", gameDir)
         changed = true
     }

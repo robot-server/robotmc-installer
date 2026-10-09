@@ -3,6 +3,7 @@ package com.sysbot32.robotmc.installer.launcher
 import com.fasterxml.jackson.databind.ObjectMapper
 import com.sysbot32.robotmc.installer.config.InstallerProperties
 import com.sysbot32.robotmc.installer.config.gameDirectory
+import com.sysbot32.robotmc.installer.config.profileDisplayName
 import io.github.oshai.kotlinlogging.KotlinLogging
 import org.springframework.stereotype.Service
 import java.nio.file.Files
@@ -35,8 +36,9 @@ class LauncherService(
         path: Path = installerProperties.minecraft.directory.resolve("launcher_profiles.json"),
     ) {
         val gameDir = gameDirectory(installerProperties.minecraft.directory)
-        val edited = editRobotMcLauncherProfile(Files.readString(path), profileVersionId, gameDir)
+        val profileName = installerProperties.profileDisplayName()
+        val edited = editRobotMcLauncherProfile(Files.readString(path), profileVersionId, gameDir, profileName)
         Files.writeString(path, edited)
-        log.info { "$path: $profileVersionId -> $ROBOTMC_PROFILE_NAME ($gameDir)" }
+        log.info { "$path: $profileVersionId -> $profileName ($gameDir)" }
     }
 }

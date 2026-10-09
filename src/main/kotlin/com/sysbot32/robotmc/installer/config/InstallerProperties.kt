@@ -6,6 +6,8 @@ import org.springframework.boot.context.properties.ConfigurationProperties
 import java.nio.file.Path
 import java.nio.file.Paths
 
+const val DEFAULT_PROFILE_NAME = "RobotMC"
+
 @ConfigurationProperties(prefix = "installer")
 data class InstallerProperties(
     val mode: Mode = Mode.INSTALL,
@@ -14,6 +16,10 @@ data class InstallerProperties(
     val servers: List<ServersDat.Server> = listOf(),
     val resourcePacks: List<ResourcePack> = listOf(),
     val update: Update = Update(),
+    /**
+     * 런처에 보이는 프로필 이름. application.yml 의 profile-name.
+     */
+    val profileName: String = DEFAULT_PROFILE_NAME,
 ) {
     enum class Mode {
         INSTALL,
@@ -79,6 +85,14 @@ data class InstallerProperties(
  */
 fun gameDirectory(minecraftDirectory: Path): Path {
     return minecraftDirectory.toAbsolutePath().normalize().resolve("robotmc")
+}
+
+/**
+ * 구성의 프로필 이름. 공백만 있으면 [DEFAULT_PROFILE_NAME].
+ */
+fun InstallerProperties.profileDisplayName(): String {
+    val name = this.profileName.trim()
+    return name.ifBlank { DEFAULT_PROFILE_NAME }
 }
 
 /**
