@@ -1,5 +1,5 @@
 plugins {
-    kotlin("jvm") version "2.2.20"
+    kotlin("jvm") version "2.3.21"
 }
 
 // 게임 JVM 에 올리는 에이전트. Spring, Compose, 설치기 로거는 이 모듈에 없다.
