@@ -30,6 +30,7 @@ data class SessionState(
     val message: String?,
     val exitCode: Int?,
     val declined: Boolean,
+    val notice: Boolean = false,
 ) {
     val fraction: Float
         get() = if (this.totalSteps <= 0) {
@@ -48,21 +49,38 @@ class InstallerSession(
     totalSteps: Int,
     private val progress: ProgressService,
     private val work: () -> Unit,
+    notice: String? = null,
 ) : ProgressSink {
     private val decided = AtomicBoolean(false)
     private val stateFlow = MutableStateFlow(
-        SessionState(
-            phase = SessionPhase.Confirm,
-            mode = mode,
-            prompt = promptFor(mode),
-            status = "",
-            statuses = emptyList(),
-            completedSteps = if (mode == Mode.UNINSTALL) totalSteps else 0,
-            totalSteps = totalSteps,
-            message = null,
-            exitCode = null,
-            declined = false,
-        )
+        if (notice != null) {
+            SessionState(
+                phase = SessionPhase.Finished,
+                mode = mode,
+                prompt = promptFor(mode),
+                status = "",
+                statuses = emptyList(),
+                completedSteps = totalSteps,
+                totalSteps = totalSteps,
+                message = notice,
+                exitCode = 0,
+                declined = false,
+                notice = true,
+            )
+        } else {
+            SessionState(
+                phase = SessionPhase.Confirm,
+                mode = mode,
+                prompt = promptFor(mode),
+                status = "",
+                statuses = emptyList(),
+                completedSteps = if (mode == Mode.UNINSTALL) totalSteps else 0,
+                totalSteps = totalSteps,
+                message = null,
+                exitCode = null,
+                declined = false,
+            )
+        }
     )
     val state: StateFlow<SessionState> = this.stateFlow.asStateFlow()
 

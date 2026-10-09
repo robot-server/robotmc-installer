@@ -10,6 +10,9 @@ import com.sysbot32.robotmc.installer.config.DEFAULT_VERSION_ID
 import com.sysbot32.robotmc.installer.config.InstallerProperties
 import com.sysbot32.robotmc.installer.config.gameDirectory
 import com.sysbot32.robotmc.installer.mod.loader.ModLoaderInstallService
+import com.sysbot32.robotmc.installer.prelaunch.isJavaAgentToken
+import com.sysbot32.robotmc.installer.prelaunch.javaAgentJar
+import com.sysbot32.robotmc.installer.prelaunch.tokenizeJavaArgs
 import com.sysbot32.robotmc.installer.mod.loader.ModLoaderType
 import com.sysbot32.robotmc.installer.mod.loader.decideModLoaderInstall
 import com.sysbot32.robotmc.installer.progress.ProgressService
@@ -63,7 +66,7 @@ class RobotMcProfileTest {
     }
 
     @Test
-    fun existingRobotMcProfileKeepsFieldsThatAreNotNameVersionOrGameDir() {
+    fun existingRobotMcProfileKeepsUnmanagedFieldsWhileJavaArgsGainOneAgent() {
         val minecraft = Path.of("/tmp/My Minecraft/instance")
         val document = """
             {"profiles":{
@@ -73,7 +76,15 @@ class RobotMcProfileTest {
             }}
         """.trimIndent()
 
-        val edited = editRobotMcLauncherProfile(document, gameDirectory(minecraft), "RobotMC")
+        val agentPath = Path.of("/tmp/My Agent/robotmc-prelaunch-agent.jar")
+        val agentOptions = Path.of("/tmp/My Agent/prelaunch.properties")
+        val edited = editRobotMcLauncherProfile(
+            document,
+            gameDirectory(minecraft),
+            "RobotMC",
+            javaAgentJar = agentPath,
+            javaAgentOptions = agentOptions,
+        )
 
         val mapper = ObjectMapper()
         val before = mapper.readTree(document).get("profiles")
@@ -86,7 +97,10 @@ class RobotMcProfileTest {
         assertEquals(gameDirectory(minecraft).toString(), ours.get("gameDir").asText())
         assertEquals(DEFAULT_PROFILE_ICON, ours.get("icon").asText())
         assertEquals("2020-01-01T00:00:00Z", ours.get("created").asText())
-        assertEquals("-Xmx2G", ours.get("javaArgs").asText())
+        val tokens = tokenizeJavaArgs(ours.get("javaArgs").asText())
+        assertEquals(listOf("-Xmx2G"), tokens.filterNot { isJavaAgentToken(it) })
+        assertEquals(1, tokens.count { isJavaAgentToken(it) })
+        assertEquals(agentPath.toAbsolutePath().normalize(), javaAgentJar(tokens.single { isJavaAgentToken(it) }))
         assertEquals(true, ours.get("unknownProfileField").get("keep").asBoolean())
     }
 

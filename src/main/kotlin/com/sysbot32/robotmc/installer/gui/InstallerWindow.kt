@@ -423,6 +423,7 @@ private fun ColumnScope.FinishedPhase(
         Text(
             when {
                 state.declined -> "취소"
+                state.notice -> "안내"
                 failed -> "오류"
                 else -> "완료"
             },
@@ -490,6 +491,7 @@ private fun windowTitle(state: SessionState): String = when (state.phase) {
     SessionPhase.Working -> InstallerSession.workingTitle(state.mode)
     SessionPhase.Finished -> when {
         state.declined -> "취소"
+        state.notice -> "안내"
         (state.exitCode ?: 0) != 0 -> "오류"
         else -> "완료"
     }

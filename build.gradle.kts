@@ -37,6 +37,7 @@ repositories {
 }
 
 dependencies {
+    implementation(project(":prelaunch"))
     implementation("org.springframework.boot:spring-boot-starter-web")
     implementation("org.jetbrains.kotlin:kotlin-reflect")
     implementation("io.github.oshai:kotlin-logging-jvm:7.0.7")
@@ -105,6 +106,25 @@ sourceSets.named("main") {
     resources.srcDir(generateInstallerVersion)
 }
 
+val prelaunchAgentJar = project(":prelaunch").layout.buildDirectory.file("agent/robotmc-prelaunch-agent.jar")
+
+tasks.named<org.gradle.language.jvm.tasks.ProcessResources>("processResources") {
+    dependsOn(":prelaunch:agentJar")
+    from(prelaunchAgentJar)
+}
+
+tasks.withType<Test> {
+    dependsOn(":prelaunch:agentJar")
+    systemProperty("robotmc.prelaunch.agent", prelaunchAgentJar.get().asFile.absolutePath)
+    systemProperty(
+        "robotmc.prelaunch.home",
+        layout.buildDirectory.dir("tmp/prelaunch-home").get().asFile.absolutePath,
+    )
+    providers.gradleProperty("robotmc.prelaunch.log").orNull?.let { logPath ->
+        systemProperty("robotmc.prelaunch.log", logPath)
+    }
+}
+
 tasks.named<Jar>("jar") {
     manifest {
         attributes(
@@ -127,6 +147,11 @@ val installerJdk = extensions.getByType(JavaToolchainService::class.java).launch
 }
 val installerBootJar = tasks.named<org.springframework.boot.gradle.tasks.bundling.BootJar>("bootJar")
     .flatMap { it.archiveFile }
+
+tasks.withType<Test> {
+    dependsOn(installerBootJar)
+    systemProperty("robotmc.boot.jar", installerBootJar.get().asFile.absolutePath)
+}
 val installerAppImageDir = layout.buildDirectory.dir("installer-app-image")
 val installerAppImageWork = layout.buildDirectory.dir("tmp/installer-app-image")
 
