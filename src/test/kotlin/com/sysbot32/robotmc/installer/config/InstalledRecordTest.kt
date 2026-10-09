@@ -30,19 +30,22 @@ class InstalledRecordTest {
                     InstallerProperties.Mod.Mod("https://example.com/.."),
                 ),
             ),
-            resourcePacks = listOf(InstallerProperties.ResourcePack("https://example.com/pack.zip")),
+            resourcePacks = listOf(
+                InstallerProperties.ResourcePack("https://example.com/pack.zip"),
+                InstallerProperties.ResourcePack("https://example.com/.."),
+            ),
         )
 
-        assertEquals(listOf("mods/good.jar", "resourcepacks/pack.zip"), installedPaths(properties))
+        assertEquals(listOf("resourcepacks/pack.zip"), installedPaths(properties))
     }
 
     @Test
     fun recordedNamesStayInsideTheFolder() {
         assertEquals(
-            listOf("good.jar"),
+            listOf("pack.zip"),
             recordedNames(
-                listOf("mods/good.jar", "mods/../secret", "mods/..", "resourcepacks/a.zip"),
-                "mods",
+                listOf("resourcepacks/pack.zip", "resourcepacks/../secret", "resourcepacks/..", "mods/a.jar"),
+                "resourcepacks",
             ),
         )
     }
@@ -58,7 +61,7 @@ class InstalledRecordTest {
     }
 
     @Test
-    fun successfulInstallRecordsModAndResourcePackNames() {
+    fun successfulInstallRecordsResourcePackNames() {
         val minecraft = Files.createTempDirectory("installed-record")
         val properties = properties(
             minecraft,
@@ -69,7 +72,7 @@ class InstalledRecordTest {
         InstalledRecordService(properties).install()
 
         assertEquals(
-            listOf("mods/good.jar", "resourcepacks/pack.zip"),
+            listOf("resourcepacks/pack.zip"),
             InstalledRecord.read(expectedGameDir(minecraft)),
         )
         assertFalse(Files.exists(InstalledRecord.file(minecraft)))

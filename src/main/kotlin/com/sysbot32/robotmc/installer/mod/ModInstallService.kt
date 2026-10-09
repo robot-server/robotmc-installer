@@ -1,7 +1,6 @@
 package com.sysbot32.robotmc.installer.mod
 
 import com.sysbot32.robotmc.installer.InstallService
-import com.sysbot32.robotmc.installer.config.InstalledRecord
 import com.sysbot32.robotmc.installer.config.InstallerProperties
 import com.sysbot32.robotmc.installer.config.configFileName
 import com.sysbot32.robotmc.installer.config.gameDirectory
