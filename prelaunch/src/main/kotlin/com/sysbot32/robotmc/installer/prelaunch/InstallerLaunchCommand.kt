@@ -1,7 +1,6 @@
 package com.sysbot32.robotmc.installer.prelaunch
 
-import java.net.URLDecoder
-import java.nio.charset.StandardCharsets
+import java.net.URI
 import java.nio.file.Files
 import java.nio.file.Path
 import java.util.Locale
@@ -111,6 +110,18 @@ fun installerJarPath(location: String): String? {
     if (external.startsWith("file:")) {
         external = external.removePrefix("file:")
     }
-    val path = URLDecoder.decode(external, StandardCharsets.UTF_8)
-    return path.ifBlank { null }
+    return decodePath(external)
+}
+
+/** `+` 는 경로 문자다. URLDecoder 는 그것을 공백으로 바꾼다. */
+private fun decodePath(external: String): String? {
+    if (external.isBlank()) {
+        return null
+    }
+    return try {
+        val uri = if (external.startsWith("/")) "file:$external" else "file:/$external"
+        URI.create(uri).path?.ifBlank { null } ?: external
+    } catch (exception: Exception) {
+        external
+    }
 }
