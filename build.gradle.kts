@@ -3,11 +3,11 @@ import java.security.MessageDigest
 import java.util.jar.JarFile
 
 plugins {
-    kotlin("jvm") version "2.2.20"
-    kotlin("plugin.spring") version "2.2.20"
-    kotlin("plugin.compose") version "2.2.20"
+    kotlin("jvm") version "2.3.21"
+    kotlin("plugin.spring") version "2.3.21"
+    kotlin("plugin.compose") version "2.3.21"
     id("org.jetbrains.compose") version "1.12.1"
-    id("org.springframework.boot") version "3.5.0"
+    id("org.springframework.boot") version "3.5.16"
     id("io.spring.dependency-management") version "1.1.7"
 }
 
@@ -19,9 +19,13 @@ group = "com.sysbot32"
  */
 version = "1.0.0"
 
+// 설치기 JDK. 루트 툴체인, Kotlin 툴체인, jlink/jpackage, 이미지 검사가 이 값을 같이 쓴다.
+// 게임 JVM이 읽는 prelaunch 에이전트는 이 값과 별개로 Java 21이다.
+val installerJdkMajor = 25
+
 java {
     toolchain {
-        languageVersion = JavaLanguageVersion.of(21)
+        languageVersion = JavaLanguageVersion.of(installerJdkMajor)
     }
 }
 
@@ -60,8 +64,9 @@ dependencies {
 }
 
 kotlin {
-    jvmToolchain(21)
+    jvmToolchain(installerJdkMajor)
     compilerOptions {
+        jvmTarget.set(org.jetbrains.kotlin.gradle.dsl.JvmTarget.JVM_25)
         freeCompilerArgs.addAll("-Xjsr305=strict")
     }
 }
@@ -143,7 +148,7 @@ val bootJarMainClass = "org.springframework.boot.loader.launch.JarLauncher"
 val installerAppName = "RobotMC Installer"
 
 val installerJdk = extensions.getByType(JavaToolchainService::class.java).launcherFor {
-    languageVersion.set(JavaLanguageVersion.of(21))
+    languageVersion.set(JavaLanguageVersion.of(installerJdkMajor))
 }
 val installerBootJar = tasks.named<org.springframework.boot.gradle.tasks.bundling.BootJar>("bootJar")
     .flatMap { it.archiveFile }
@@ -157,7 +162,7 @@ val installerAppImageWork = layout.buildDirectory.dir("tmp/installer-app-image")
 
 tasks.register("packageInstallerAppImage") {
     group = "distribution"
-    description = "현재 OS용 앱 이미지에 Java 21 런타임과 bootJar를 넣는다."
+    description = "현재 OS용 앱 이미지에 Java $installerJdkMajor 런타임과 bootJar를 넣는다."
     dependsOn(installerBootJar)
     inputs.file(installerBootJar)
     inputs.property("version", providers.provider { project.version.toString() })
@@ -177,7 +182,7 @@ tasks.register("packageInstallerAppImage") {
 // test에 붙이지 않는다. 이미지를 만들면 단위 테스트가 느려진다.
 tasks.register("checkInstallerAppImage") {
     group = "verification"
-    description = "앱 이미지의 런처와 포함된 Java 21 java를 검사한다."
+    description = "앱 이미지의 런처와 포함된 Java $installerJdkMajor java를 검사한다."
     dependsOn("packageInstallerAppImage")
     inputs.file(installerBootJar)
     inputs.dir(installerAppImageDir)
@@ -295,8 +300,8 @@ fun verifyInstallerAppImage(imageDir: File, bootJar: File, jdkHome: File): Insta
     }
     val versionOutput = runCaptured(listOf(javaCanonical.absolutePath, "-version"))
     val major = javaMajor(versionOutput)
-    if (major != 21) {
-        throw org.gradle.api.GradleException("Java 메이저 버전이 21이 아닙니다: $versionOutput")
+    if (major != installerJdkMajor) {
+        throw org.gradle.api.GradleException("Java 메이저 버전이 ${installerJdkMajor}가 아닙니다: $versionOutput")
     }
     val bundledModules = moduleNames(javaCanonical)
     val jdkModules = moduleNames(jdkBin(jdkHome, "java"))
@@ -310,8 +315,8 @@ fun verifyInstallerAppImage(imageDir: File, bootJar: File, jdkHome: File): Insta
         .removePrefix("probe.java.home=")
     val probeVersion = probe.lineSequence().first { it.startsWith("probe.java.version=") }
         .removePrefix("probe.java.version=")
-    if (javaMajor("version \"$probeVersion\"") != 21) {
-        throw org.gradle.api.GradleException("jar 실행의 Java 버전이 21이 아닙니다: $probeVersion")
+    if (javaMajor("version \"$probeVersion\"") != installerJdkMajor) {
+        throw org.gradle.api.GradleException("jar 실행의 Java 버전이 ${installerJdkMajor}가 아닙니다: $probeVersion")
     }
     val javaName = if (installerHostOs() == "windows") "java.exe" else "java"
     val probeJava = File(probeHome, "bin/$javaName").canonicalFile
