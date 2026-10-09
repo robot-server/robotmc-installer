@@ -1,3 +1,4 @@
+import com.sysbot32.robotmc.installer.InstallerVersion
 import java.nio.file.Files
 import java.security.MessageDigest
 import java.util.jar.JarFile
@@ -16,8 +17,10 @@ group = "com.sysbot32"
  * 새로운 시작 - 메이저
  * 기존 사용자 업데이트 필요 - 마이너
  * 기존 사용자 업데이트 필요 없음 - 패치
+ *
+ * 태그 릴리스 잡만 `-PreleaseRef=v1.2.0` 처럼 넘긴다. 없으면 1.0.0 이다.
  */
-version = "1.0.0"
+version = InstallerVersion.versionFor(gradle.startParameter.projectProperties["releaseRef"])
 
 // 설치기 JDK. 루트 툴체인, Kotlin 툴체인, jlink/jpackage, 이미지 검사가 이 값을 같이 쓴다.
 // 게임 JVM이 읽는 prelaunch 에이전트는 이 값과 별개로 Java 21이다.
@@ -60,6 +63,7 @@ dependencies {
     annotationProcessor("org.springframework.boot:spring-boot-configuration-processor")
     testImplementation("org.springframework.boot:spring-boot-starter-test")
     testImplementation("org.jetbrains.kotlin:kotlin-test-junit5")
+    testImplementation(files(rootProject.layout.projectDirectory.file("buildSrc/build/libs/buildSrc.jar")))
     testRuntimeOnly("org.junit.platform:junit-platform-launcher")
 }
 
