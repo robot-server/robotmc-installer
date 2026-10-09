@@ -11,7 +11,7 @@ const val DEFAULT_PROFILE_NAME = "RobotMC"
 const val DEFAULT_PROFILE_KEY = "robotmc"
 const val DEFAULT_VERSION_ID = "RobotMC"
 const val DEFAULT_GAME_DIRECTORY_NAME = "robotmc"
-const val DEFAULT_PROFILE_ICON = "Furnace"
+const val DEFAULT_PROFILE_ICON = "Redstone_Block"
 
 /** 마인크래프트 디렉터리 바로 아래에서 게임이 쓰는 폴더. 게임 폴더 이름으로 쓰면 제거가 그 데이터를 지운다. */
 val MINECRAFT_ROOT_DIRECTORY_NAMES = setOf(

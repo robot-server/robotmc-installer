@@ -14,7 +14,7 @@ installer:
   profile-key: robotmc
   version-id: RobotMC
   game-directory-name: robotmc
-  profile-icon: Furnace
+  profile-icon: Redstone_Block
   minecraft:
     version: 1.21.11
   mod:
