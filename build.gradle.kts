@@ -37,6 +37,7 @@ repositories {
 }
 
 dependencies {
+    implementation(project(":prelaunch"))
     implementation("org.springframework.boot:spring-boot-starter-web")
     implementation("org.jetbrains.kotlin:kotlin-reflect")
     implementation("io.github.oshai:kotlin-logging-jvm:7.0.7")
@@ -103,6 +104,25 @@ val generateInstallerVersion = tasks.register("generateInstallerVersion") {
 
 sourceSets.named("main") {
     resources.srcDir(generateInstallerVersion)
+}
+
+val prelaunchAgentJar = project(":prelaunch").layout.buildDirectory.file("agent/robotmc-prelaunch-agent.jar")
+
+tasks.named<org.gradle.language.jvm.tasks.ProcessResources>("processResources") {
+    dependsOn(":prelaunch:agentJar")
+    from(prelaunchAgentJar)
+}
+
+tasks.withType<Test> {
+    dependsOn(":prelaunch:agentJar")
+    systemProperty("robotmc.prelaunch.agent", prelaunchAgentJar.get().asFile.absolutePath)
+    systemProperty(
+        "robotmc.prelaunch.home",
+        layout.buildDirectory.dir("tmp/prelaunch-home").get().asFile.absolutePath,
+    )
+    providers.gradleProperty("robotmc.prelaunch.log").orNull?.let { logPath ->
+        systemProperty("robotmc.prelaunch.log", logPath)
+    }
 }
 
 tasks.named<Jar>("jar") {

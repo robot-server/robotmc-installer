@@ -6,6 +6,7 @@ import com.sysbot32.robotmc.installer.config.DEFAULT_PROFILE_ICON
 import com.sysbot32.robotmc.installer.config.DEFAULT_PROFILE_KEY
 import com.sysbot32.robotmc.installer.config.DEFAULT_VERSION_ID
 import com.sysbot32.robotmc.installer.config.pathSegment
+import com.sysbot32.robotmc.installer.prelaunch.mergeJavaAgent
 import java.nio.file.Path
 import java.time.OffsetDateTime
 import java.time.ZoneOffset
@@ -101,6 +102,8 @@ fun editRobotMcLauncherProfile(
     profileKey: String = DEFAULT_PROFILE_KEY,
     versionId: String = DEFAULT_VERSION_ID,
     profileIcon: String = DEFAULT_PROFILE_ICON,
+    javaAgentJar: Path? = null,
+    javaAgentOptions: Path? = null,
 ): String {
     val mapper = ObjectMapper()
     val root = mapper.readTree(document)
@@ -134,6 +137,14 @@ fun editRobotMcLauncherProfile(
     }
     if (profile.putTextIfDifferent("gameDir", gameDir)) {
         changed = true
+    }
+    if (javaAgentJar != null && javaAgentOptions != null) {
+        val current = profile.get("javaArgs")
+        val currentText = if (current != null && current.isTextual) current.asText() else null
+        val merged = mergeJavaAgent(currentText, javaAgentJar, javaAgentOptions)
+        if (profile.putTextIfDifferent("javaArgs", merged)) {
+            changed = true
+        }
     }
     if (!changed) {
         return document
