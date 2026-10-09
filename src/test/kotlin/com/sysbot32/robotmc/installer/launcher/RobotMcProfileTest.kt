@@ -41,7 +41,7 @@ class RobotMcProfileTest {
     }
 
     @Test
-    fun neoForgeProfileIsRenamedWithoutDroppingOtherJson() {
+    fun neoForgeProfileStaysWhileRobotMcProfileIsAdded() {
         assertDirectEdit(
             profileKey = "NeoForge",
             visibleName = "NeoForge",
@@ -50,7 +50,7 @@ class RobotMcProfileTest {
     }
 
     @Test
-    fun fabricProfileIsRenamedWithoutDroppingOtherJson() {
+    fun fabricProfileStaysWhileRobotMcProfileIsAdded() {
         assertDirectEdit(
             profileKey = "fabric-loader-1.21.11",
             visibleName = "fabric-loader-0.16.14-1.21.11",
@@ -59,7 +59,36 @@ class RobotMcProfileTest {
     }
 
     @Test
-    fun installRenamesAnExistingProfileWithoutRunningTheLoader() {
+    fun existingRobotMcProfileKeepsFieldsThatAreNotNameVersionOrGameDir() {
+        val minecraft = Path.of("/tmp/My Minecraft/instance")
+        val document = """
+            {"profiles":{
+              "NeoForge":{"name":"NeoForge","type":"custom","icon":"","lastVersionId":"neoforge-21.11.6-beta","gameDir":null,"javaArgs":"-Xmx4G"},
+              "personal-pack":{"name":"personal-pack","type":"custom","icon":"Bookshelf","lastVersionId":"neoforge-21.11.6-beta","gameDir":"/games/personal-pack","javaArgs":"-Xmx8G"},
+              "$ROBOTMC_PROFILE_KEY":{"name":"Old","type":"custom","icon":"Grass","created":"2020-01-01T00:00:00Z","lastVersionId":"neoforge-old","gameDir":"/old","javaArgs":"-Xmx2G","unknownProfileField":{"keep":true}}
+            }}
+        """.trimIndent()
+
+        val edited = editRobotMcLauncherProfile(document, "neoforge-21.11.6-beta", gameDirectory(minecraft), "RobotMC")
+
+        val mapper = ObjectMapper()
+        val before = mapper.readTree(document).get("profiles")
+        val after = mapper.readTree(edited).get("profiles")
+        assertEquals(before.get("NeoForge"), after.get("NeoForge"))
+        assertEquals(before.get("personal-pack"), after.get("personal-pack"))
+        val ours = after.get(ROBOTMC_PROFILE_KEY)
+        assertEquals("RobotMC", ours.get("name").asText())
+        assertEquals("neoforge-21.11.6-beta", ours.get("lastVersionId").asText())
+        assertEquals(gameDirectory(minecraft).toString(), ours.get("gameDir").asText())
+        assertNotEquals("RobotMC", ours.get("lastVersionId").asText())
+        assertEquals("Grass", ours.get("icon").asText())
+        assertEquals("2020-01-01T00:00:00Z", ours.get("created").asText())
+        assertEquals("-Xmx2G", ours.get("javaArgs").asText())
+        assertEquals(true, ours.get("unknownProfileField").get("keep").asBoolean())
+    }
+
+    @Test
+    fun installAddsRobotMcProfileWithoutRunningTheLoader() {
         installAlreadyPresent(
             type = ModLoaderType.NEO_FORGE,
             loaderVersion = "21.11.6-beta",
@@ -208,29 +237,25 @@ class RobotMcProfileTest {
         assertEquals("vanilla", edited.get("selectedProfile").asText())
         val beforeProfiles = original.get("profiles")
         val afterProfiles = edited.get("profiles")
-        assertEquals(names(beforeProfiles), names(afterProfiles))
-        assertEquals(beforeProfiles.get("vanilla"), afterProfiles.get("vanilla"))
-        assertEquals("Latest Release", afterProfiles.get("vanilla").get("name").asText())
-        assertEquals("latest-release", afterProfiles.get("vanilla").get("lastVersionId").asText())
-
-        val beforeProfile = beforeProfiles.get(profileKey)
-        val afterProfile = afterProfiles.get(profileKey)
-        assertEquals(names(beforeProfile), names(afterProfile))
-        for (field in names(beforeProfile)) {
-            if (field == "name" || field == "gameDir") {
-                continue
-            }
-            assertEquals(beforeProfile.get(field), afterProfile.get(field), field)
+        assertEquals(names(beforeProfiles) + ROBOTMC_PROFILE_KEY, names(afterProfiles))
+        for (key in names(beforeProfiles)) {
+            assertEquals(beforeProfiles.get(key), afterProfiles.get(key), key)
         }
-        assertEquals(visibleName, beforeProfile.get("name").asText())
-        assertEquals(expectedProfileName, afterProfile.get("name").asText())
-        assertEquals(lastVersionId, afterProfile.get("lastVersionId").asText())
-        assertNotEquals(expectedProfileName, afterProfile.get("lastVersionId").asText())
-        assertEquals("data:image/png;base64,AAAA", afterProfile.get("icon").asText())
-        assertEquals("-Xmx4G -XX:+UseG1GC", afterProfile.get("javaArgs").asText())
-        assertEquals("2024-01-02T03:04:05.000Z", afterProfile.get("created").asText())
-        assertEquals(true, afterProfile.get("unknownProfileField").get("keep").asBoolean())
-        val gameDir = Path.of(afterProfile.get("gameDir").textValue())
+        assertEquals(visibleName, afterProfiles.get(profileKey).get("name").asText())
+        assertEquals(lastVersionId, afterProfiles.get(profileKey).get("lastVersionId").asText())
+        assertTrue(afterProfiles.get(profileKey).get("gameDir").isNull)
+        assertEquals("personal-pack", afterProfiles.get("personal-pack").get("name").asText())
+        assertEquals("/games/personal-pack", afterProfiles.get("personal-pack").get("gameDir").asText())
+        assertEquals(lastVersionId, afterProfiles.get("personal-pack").get("lastVersionId").asText())
+
+        val robotmc = afterProfiles.get(ROBOTMC_PROFILE_KEY)
+        assertEquals(expectedProfileName, robotmc.get("name").asText())
+        assertEquals(lastVersionId, robotmc.get("lastVersionId").asText())
+        assertNotEquals(expectedProfileName, robotmc.get("lastVersionId").asText())
+        assertEquals("custom", robotmc.get("type").asText())
+        assertTrue(robotmc.get("icon").isTextual)
+        assertTrue(robotmc.get("created").isTextual)
+        val gameDir = Path.of(robotmc.get("gameDir").textValue())
         assertEquals(expectedGameDir(minecraft), gameDir)
         assertTrue(gameDir.isAbsolute)
         assertNotEquals(minecraft.toAbsolutePath().normalize(), gameDir)
@@ -271,6 +296,15 @@ class RobotMcProfileTest {
                   "logConfigIsXml": null,
                   "resolution": {"width": 1280, "height": 720},
                   "unknownProfileField": {"keep": true}
+                },
+                "personal-pack": {
+                  "name": "personal-pack",
+                  "type": "custom",
+                  "created": "2023-03-03T03:03:03.000Z",
+                  "icon": "Bookshelf",
+                  "lastVersionId": "$lastVersionId",
+                  "gameDir": "/games/personal-pack",
+                  "javaArgs": "-Xmx8G"
                 },
                 "vanilla": {
                   "name": "Latest Release",

@@ -4,6 +4,7 @@ import com.fasterxml.jackson.databind.ObjectMapper
 import com.fasterxml.jackson.databind.node.ObjectNode
 import java.nio.file.Path
 import java.time.OffsetDateTime
+import java.time.ZoneOffset
 
 /**
  * https://minecraft.fandom.com/wiki/Launcher_profiles.json
@@ -83,8 +84,11 @@ data class LauncherProfilesJson(
     }
 }
 
+const val ROBOTMC_PROFILE_KEY = "robotmc"
+
 /**
- * [profileVersionId] 와 같은 lastVersionId 프로필의 보이는 이름과 gameDir 만 바꾼다.
+ * 키 [ROBOTMC_PROFILE_KEY] 프로필만 만들거나 고친다.
+ * lastVersionId 는 로더가 설치한 버전 id 그대로다. 다른 프로필은 건드리지 않는다.
  * 데이터 클래스로 다시 쓰면 settings, 계정, 모르는 프로필 필드가 빠진다.
  */
 fun editRobotMcLauncherProfile(
@@ -95,34 +99,44 @@ fun editRobotMcLauncherProfile(
 ): String {
     val mapper = ObjectMapper()
     val root = mapper.readTree(document)
-    val profiles = root.get("profiles")
-    if (root !is ObjectNode || profiles !is ObjectNode) {
+    if (root !is ObjectNode) {
         return document
     }
+    val profilesNode = root.get("profiles")
+    val profiles = when {
+        profilesNode is ObjectNode -> profilesNode
+        profilesNode == null || profilesNode.isNull -> root.putObject("profiles")
+        else -> return document
+    }
     val gameDir = gameDirectory.toAbsolutePath().normalize().toString()
-    var changed = false
-    for (entry in profiles.properties()) {
-        val profile = entry.value
-        if (profile !is ObjectNode) {
-            continue
-        }
-        val version = profile.get("lastVersionId")
-        if (version == null || !version.isTextual || version.asText() != profileVersionId) {
-            continue
-        }
-        val name = profile.get("name")
-        val directory = profile.get("gameDir")
-        val alreadyNamed = name != null && name.isTextual && name.asText() == profileName
-        val alreadyPlaced = directory != null && directory.isTextual && directory.asText() == gameDir
-        if (alreadyNamed && alreadyPlaced) {
-            continue
-        }
-        profile.put("name", profileName)
-        profile.put("gameDir", gameDir)
+    val existing = profiles.get(ROBOTMC_PROFILE_KEY)
+    val profile = if (existing is ObjectNode) existing else profiles.putObject(ROBOTMC_PROFILE_KEY)
+    var changed = existing !is ObjectNode
+    if (existing !is ObjectNode) {
+        profile.put("type", "custom")
+        profile.put("icon", "")
+        profile.put("created", OffsetDateTime.now(ZoneOffset.UTC).toString())
+    }
+    if (profile.putTextIfDifferent("name", profileName)) {
+        changed = true
+    }
+    if (profile.putTextIfDifferent("lastVersionId", profileVersionId)) {
+        changed = true
+    }
+    if (profile.putTextIfDifferent("gameDir", gameDir)) {
         changed = true
     }
     if (!changed) {
         return document
     }
     return mapper.writeValueAsString(root)
+}
+
+private fun ObjectNode.putTextIfDifferent(field: String, value: String): Boolean {
+    val current = this.get(field)
+    if (current != null && current.isTextual && current.asText() == value) {
+        return false
+    }
+    this.put(field, value)
+    return true
 }

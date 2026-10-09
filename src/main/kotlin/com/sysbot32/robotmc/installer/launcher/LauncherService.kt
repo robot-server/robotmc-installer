@@ -29,7 +29,7 @@ class LauncherService(
 
     /**
      * 로더 설치를 실행했거나 건너뛴 뒤에 호출한다.
-     * 설치기가 방금 쓴 프로필도 여기서 이름을 맞춘다.
+     * NeoForge, Fabric, 사용자가 만든 프로필은 그대로 둔다.
      */
     fun applyRobotMcProfile(
         profileVersionId: String,
