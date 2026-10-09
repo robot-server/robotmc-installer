@@ -112,6 +112,36 @@ class LoaderVersionAliasTest {
     }
 
     @Test
+    fun installedLoaderJsonIsNotTreatedAsAnAlias() {
+        val minecraft = Files.createTempDirectory("robotmc-alias")
+        val loaderId = "neoforge-21.11.6-beta"
+        val loaderJson = minecraft.resolve("versions/$loaderId/$loaderId.json")
+        val original = """
+            {"id":"$loaderId","inheritsFrom":"1.21.11","mainClass":"cpw.mods.bootstraplauncher.BootstrapLauncher","libraries":[{"name":"net.neoforged:neoforge:21.11.6-beta"}]}
+        """.trimIndent()
+        Files.createDirectories(loaderJson.parent)
+        Files.writeString(loaderJson, original)
+
+        assertFailsWith<UserException> {
+            writeLoaderVersionAlias(minecraft, "neoforge-21.11.7-beta", loaderId)
+        }
+        deleteVersionAlias(minecraft, loaderId, "neoforge-21.11.7-beta")
+
+        assertEquals(original, Files.readString(loaderJson))
+        assertTrue(Files.isDirectory(loaderJson.parent))
+    }
+
+    @Test
+    fun uninstallRemovesAnAliasThatPointsAtAnOlderLoader() {
+        val minecraft = Files.createTempDirectory("robotmc-alias")
+        writeLoaderVersionAlias(minecraft, "neoforge-21.11.6-beta", DEFAULT_VERSION_ID)
+
+        deleteVersionAlias(minecraft, DEFAULT_VERSION_ID, "neoforge-21.11.7-beta")
+
+        assertFalse(Files.exists(loaderVersionAliasPath(minecraft, DEFAULT_VERSION_ID)))
+    }
+
+    @Test
     fun deleteFailureIsReported() {
         val minecraft = Files.createTempDirectory("robotmc-alias")
         val gameDir = gameDirectory(minecraft, "pack")

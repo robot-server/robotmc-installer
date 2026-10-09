@@ -153,7 +153,8 @@ fun deleteGameDirectory(minecraftDirectory: Path, directoryName: String) {
 
 /**
  * 이 설치가 쓴 별칭 폴더만 지운다.
- * [loaderVersionId] 와 같거나, JSON 이 그 로더를 가리키는 별칭이 아니면 원본 버전은 둔다.
+ * 로더 버전 폴더 이름이거나, 로더 JSON(libraries, mainClass)이면 두지 않고 남긴다.
+ * 가리키는 로더 버전이 지금 구성과 달라도 별칭이면 지운다.
  */
 fun deleteVersionAlias(minecraftDirectory: Path, versionId: String, loaderVersionId: String) {
     val id = pathSegment(versionId, DEFAULT_VERSION_ID)
@@ -164,8 +165,7 @@ fun deleteVersionAlias(minecraftDirectory: Path, versionId: String, loaderVersio
     if (!Files.isRegularFile(json)) {
         return
     }
-    val document = Files.readString(json)
-    if (!isLoaderVersionAlias(document, id) || loaderVersionAliasInherits(document) != loaderVersionId) {
+    if (!isLoaderVersionAlias(Files.readString(json), id)) {
         return
     }
     val versionDir = json.parent ?: return
@@ -177,11 +177,24 @@ fun deleteVersionAlias(minecraftDirectory: Path, versionId: String, loaderVersio
     deleteTreeIfExists(target)
 }
 
+private val loaderPayloadFields = listOf("arguments", "downloads", "libraries", "mainClass", "minecraftArguments")
+
+/**
+ * 설치기가 만드는 별칭은 id 와 inheritsFrom 만 있는 얇은 JSON 이다.
+ * 로더가 설치한 JSON 은 libraries 나 mainClass 를 가지므로 별칭이 아니다.
+ */
 private fun isLoaderVersionAlias(document: String, versionId: String): Boolean {
     return try {
-        val id = ObjectMapper().readTree(document).get("id")
+        val root = ObjectMapper().readTree(document)
+        val id = root.get("id")
         val inherits = loaderVersionAliasInherits(document)
-        id != null && id.isTextual && id.asText() == versionId && !inherits.isNullOrBlank() && inherits != versionId
+        val loaderPayload = loaderPayloadFields.any { root.has(it) }
+        id != null &&
+            id.isTextual &&
+            id.asText() == versionId &&
+            !inherits.isNullOrBlank() &&
+            inherits != versionId &&
+            !loaderPayload
     } catch (exception: Exception) {
         false
     }
