@@ -1,5 +1,6 @@
 package com.sysbot32.robotmc.installer.launcher
 
+import com.sysbot32.robotmc.installer.prelaunch.LAUNCHER_RESTART_DETAIL
 import com.sysbot32.robotmc.installer.prelaunch.loaderLaunchDiffers
 import com.sysbot32.robotmc.installer.prelaunch.runningLoaderIds
 import kotlin.test.Test
@@ -28,5 +29,12 @@ class LauncherRestartNoticeTest {
         assertEquals(listOf("neoforge-21.5.75"), fromGameArgument)
         assertTrue(loaderLaunchDiffers(fromGameArgument, "neoforge-21.11.6-beta"))
         assertFalse(loaderLaunchDiffers(fromGameArgument, "neoforge-21.5.75"))
+        assertTrue(LAUNCHER_RESTART_DETAIL.contains("게임을 종료했어요.\n마인크래프트 런처를 완전히 종료"))
+        assertTrue(LAUNCHER_RESTART_DETAIL.contains("아직 런처에 반영되지 않아"))
+        assertTrue(LAUNCHER_RESTART_DETAIL.contains("완전히 종료"))
+        assertFalse(LAUNCHER_RESTART_DETAIL.contains("모드 로더"))
+        assertTrue(LAUNCHER_RESTART_DETAIL.contains("플레이해 주세요"))
+        assertFalse(LAUNCHER_RESTART_DETAIL.contains("플레이 버튼"))
+        assertFalse(LAUNCHER_RESTART_DETAIL.contains("RobotMC"))
     }
 }

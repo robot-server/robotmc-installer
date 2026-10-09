@@ -1,6 +1,7 @@
 package com.sysbot32.robotmc.installer.prelaunch
 
-const val LAUNCHER_RESTART_DETAIL = "마인크래프트 런처를 껐다 켠 다음 다시 플레이해 주세요."
+const val LAUNCHER_RESTART_DETAIL =
+    "새로 설치한 내용이 아직 런처에 반영되지 않아 게임을 종료했어요.\n마인크래프트 런처를 완전히 종료한 뒤 다시 열고 플레이해 주세요."
 const val LAUNCHER_RESTART_ARGUMENT = "--installer.launcher-restart=true"
 
 private val NEOFORGE_JAR = Regex("""^neoforge-(.+)\.jar$""", RegexOption.IGNORE_CASE)
