@@ -27,7 +27,7 @@ class ResourcePackInstallService(
         get() = 40
 
     override fun install() {
-        val gameDir = gameDirectory(installerProperties.minecraft.directory)
+        val gameDir = installerProperties.gameDirectory()
         val resourcePackDir = gameDir.resolve("resourcepacks").also { log.info { it } }
         Files.createDirectories(resourcePackDir)
         resourcePackDir.toFile().listFiles()?.forEach { log.info { it } }
@@ -56,7 +56,7 @@ class ResourcePackInstallService(
     }
 
     override fun uninstall() {
-        val gameDir = gameDirectory(installerProperties.minecraft.directory)
+        val gameDir = installerProperties.gameDirectory()
         val resourcePackDir = gameDir.resolve("resourcepacks").also { log.info { it } }
         val configured = installerProperties.resourcePacks.map { configFileName(it.downloadUrl) }
         val names = uninstallFileNames(

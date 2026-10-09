@@ -2,6 +2,9 @@ package com.sysbot32.robotmc.installer.launcher
 
 import com.fasterxml.jackson.databind.ObjectMapper
 import com.fasterxml.jackson.databind.node.ObjectNode
+import com.sysbot32.robotmc.installer.config.DEFAULT_PROFILE_KEY
+import com.sysbot32.robotmc.installer.config.DEFAULT_VERSION_ID
+import com.sysbot32.robotmc.installer.config.pathSegment
 import java.nio.file.Path
 import java.time.OffsetDateTime
 import java.time.ZoneOffset
@@ -84,11 +87,9 @@ data class LauncherProfilesJson(
     }
 }
 
-const val ROBOTMC_PROFILE_KEY = "robotmc"
-
 /**
- * 키 [ROBOTMC_PROFILE_KEY] 프로필만 만들거나 고친다.
- * lastVersionId 는 [ROBOTMC_VERSION_ID] 다. 로더 버전은 versions/RobotMC JSON 이 가리킨다.
+ * [profileKey] 프로필만 만들거나 고친다.
+ * lastVersionId 는 [versionId] 다. 로더 버전은 그 id 의 version JSON 이 가리킨다.
  * 다른 프로필은 건드리지 않는다.
  * 데이터 클래스로 다시 쓰면 settings, 계정, 모르는 프로필 필드가 빠진다.
  */
@@ -96,6 +97,8 @@ fun editRobotMcLauncherProfile(
     document: String,
     gameDirectory: Path,
     profileName: String,
+    profileKey: String = DEFAULT_PROFILE_KEY,
+    versionId: String = DEFAULT_VERSION_ID,
 ): String {
     val mapper = ObjectMapper()
     val root = mapper.readTree(document)
@@ -109,8 +112,10 @@ fun editRobotMcLauncherProfile(
         else -> return document
     }
     val gameDir = gameDirectory.toAbsolutePath().normalize().toString()
-    val existing = profiles.get(ROBOTMC_PROFILE_KEY)
-    val profile = if (existing is ObjectNode) existing else profiles.putObject(ROBOTMC_PROFILE_KEY)
+    val key = pathSegment(profileKey, DEFAULT_PROFILE_KEY)
+    val version = pathSegment(versionId, DEFAULT_VERSION_ID)
+    val existing = profiles.get(key)
+    val profile = if (existing is ObjectNode) existing else profiles.putObject(key)
     var changed = existing !is ObjectNode
     if (existing !is ObjectNode) {
         profile.put("type", "custom")
@@ -120,7 +125,7 @@ fun editRobotMcLauncherProfile(
     if (profile.putTextIfDifferent("name", profileName)) {
         changed = true
     }
-    if (profile.putTextIfDifferent("lastVersionId", ROBOTMC_VERSION_ID)) {
+    if (profile.putTextIfDifferent("lastVersionId", version)) {
         changed = true
     }
     if (profile.putTextIfDifferent("gameDir", gameDir)) {

@@ -26,7 +26,7 @@ class ModInstallService(
         get() = 20
 
     override fun install() {
-        val gameDir = gameDirectory(installerProperties.minecraft.directory)
+        val gameDir = installerProperties.gameDirectory()
         val modsDir = gameDir.resolve("mods").also { log.info { it } }
         this.progressService.setStatus("모드 폴더 준비 중...")
         Files.createDirectories(modsDir)
@@ -62,7 +62,7 @@ class ModInstallService(
     }
 
     override fun uninstall() {
-        val gameDir = gameDirectory(installerProperties.minecraft.directory)
+        val gameDir = installerProperties.gameDirectory()
         val modsDir = gameDir.resolve("mods").also { log.info { it } }
         val configured = (installerProperties.mod?.mods ?: listOf()).map { configFileName(it.downloadUrl) }
         val names = uninstallFileNames(

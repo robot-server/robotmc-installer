@@ -63,9 +63,31 @@ class RemoteInstallerConfigTest {
             ).profileDisplayName(),
         )
         val bundled = readBundledYaml()
-        val configured = ((Yaml().load(bundled) as Map<*, *>)["installer"] as Map<*, *>)["profile-name"].toString()
-        assertEquals(configured, bindInstaller(bundled).profileName)
-        assertEquals(DEFAULT_PROFILE_NAME, configured)
+        val installer = (Yaml().load(bundled) as Map<*, *>)["installer"] as Map<*, *>
+        val bound = bindInstaller(bundled)
+        assertEquals(installer["profile-name"].toString(), bound.profileName)
+        assertEquals(DEFAULT_PROFILE_NAME, bound.profileDisplayName())
+        assertEquals(installer["profile-key"].toString(), bound.profileKey)
+        assertEquals(DEFAULT_PROFILE_KEY, bound.launcherProfileKey())
+        assertEquals(installer["version-id"].toString(), bound.versionId)
+        assertEquals(DEFAULT_VERSION_ID, bound.launcherVersionId())
+        assertEquals(installer["game-directory-name"].toString(), bound.gameDirectoryName)
+        assertEquals(DEFAULT_GAME_DIRECTORY_NAME, bound.gameDirectory().fileName.toString())
+        val custom = bindInstaller(
+            """
+            installer:
+              profile-name: My Pack
+              profile-key: mypack
+              version-id: "../Nope"
+              game-directory-name: " "
+              minecraft:
+                version: "1.21.11"
+            """.trimIndent(),
+        )
+        assertEquals("My Pack", custom.profileDisplayName())
+        assertEquals("mypack", custom.launcherProfileKey())
+        assertEquals(DEFAULT_VERSION_ID, custom.launcherVersionId())
+        assertEquals(DEFAULT_GAME_DIRECTORY_NAME, custom.gameDirectory().fileName.toString())
     }
 
     @Test

@@ -2,25 +2,32 @@ package com.sysbot32.robotmc.installer.launcher
 
 import com.fasterxml.jackson.databind.ObjectMapper
 import com.fasterxml.jackson.databind.node.ObjectNode
+import com.sysbot32.robotmc.installer.config.DEFAULT_VERSION_ID
+import com.sysbot32.robotmc.installer.config.pathSegment
 import java.nio.file.Files
 import java.nio.file.Path
 import java.time.OffsetDateTime
 import java.time.ZoneOffset
 import java.time.format.DateTimeFormatter
 
-const val ROBOTMC_VERSION_ID = "RobotMC"
-
 private val versionTime = DateTimeFormatter.ofPattern("yyyy-MM-dd'T'HH:mm:ssXXX")
 
 /**
  * 런처가 버전을 찾는 곳. gameDir 이 아니다.
  */
-fun loaderVersionAliasPath(minecraftDirectory: Path): Path {
-    return minecraftDirectory.resolve("versions").resolve(ROBOTMC_VERSION_ID).resolve("$ROBOTMC_VERSION_ID.json")
+fun loaderVersionAliasPath(
+    minecraftDirectory: Path,
+    versionId: String = DEFAULT_VERSION_ID,
+): Path {
+    val id = pathSegment(versionId, DEFAULT_VERSION_ID)
+    return minecraftDirectory.resolve("versions").resolve(id).resolve("$id.json")
 }
 
-fun readLoaderVersionAliasInherits(minecraftDirectory: Path): String? {
-    val path = loaderVersionAliasPath(minecraftDirectory)
+fun readLoaderVersionAliasInherits(
+    minecraftDirectory: Path,
+    versionId: String = DEFAULT_VERSION_ID,
+): String? {
+    val path = loaderVersionAliasPath(minecraftDirectory, versionId)
     if (!Files.isRegularFile(path)) {
         return null
     }
@@ -41,9 +48,13 @@ fun loaderVersionAliasInherits(document: String): String? {
 
 /**
  * [inheritsFrom] 은 로더가 설치한 버전 id 다.
- * id 는 [ROBOTMC_VERSION_ID] 로 고정한다. 없는 time 만 채우고, 다른 필드는 둔다.
+ * id 는 [versionId] 다. 없는 time 만 채우고, 다른 필드는 둔다.
  */
-fun editLoaderVersionAlias(document: String?, inheritsFrom: String): String {
+fun editLoaderVersionAlias(
+    document: String?,
+    inheritsFrom: String,
+    versionId: String = DEFAULT_VERSION_ID,
+): String {
     val mapper = ObjectMapper()
     val parsed = if (document.isNullOrBlank()) {
         null
@@ -56,7 +67,8 @@ fun editLoaderVersionAlias(document: String?, inheritsFrom: String): String {
     }
     val root = if (parsed is ObjectNode) parsed else mapper.createObjectNode()
     var changed = parsed !is ObjectNode
-    if (root.putAliasText("id", ROBOTMC_VERSION_ID)) {
+    val id = pathSegment(versionId, DEFAULT_VERSION_ID)
+    if (root.putAliasText("id", id)) {
         changed = true
     }
     if (root.putAliasText("inheritsFrom", inheritsFrom)) {
@@ -81,11 +93,15 @@ fun editLoaderVersionAlias(document: String?, inheritsFrom: String): String {
     return mapper.writeValueAsString(root)
 }
 
-fun writeLoaderVersionAlias(minecraftDirectory: Path, inheritsFrom: String) {
-    val path = loaderVersionAliasPath(minecraftDirectory)
+fun writeLoaderVersionAlias(
+    minecraftDirectory: Path,
+    inheritsFrom: String,
+    versionId: String = DEFAULT_VERSION_ID,
+) {
+    val path = loaderVersionAliasPath(minecraftDirectory, versionId)
     Files.createDirectories(path.parent)
     val current = if (Files.isRegularFile(path)) Files.readString(path) else null
-    val edited = editLoaderVersionAlias(current, inheritsFrom)
+    val edited = editLoaderVersionAlias(current, inheritsFrom, versionId)
     if (edited != current) {
         Files.writeString(path, edited)
     }

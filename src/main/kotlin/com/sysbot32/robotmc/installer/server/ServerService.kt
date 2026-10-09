@@ -19,7 +19,7 @@ class ServerService(
     private val progressService: ProgressService,
 ) : InstallService {
     private fun serversDatPath(): Path {
-        return gameDirectory(installerProperties.minecraft.directory).resolve("servers.dat")
+        return installerProperties.gameDirectory().resolve("servers.dat")
     }
 
     fun getServers(path: Path = serversDatPath()): ServersDat {

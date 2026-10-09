@@ -1,6 +1,7 @@
 package com.sysbot32.robotmc.installer.launcher
 
 import com.fasterxml.jackson.databind.ObjectMapper
+import com.sysbot32.robotmc.installer.config.DEFAULT_VERSION_ID
 import java.nio.file.Files
 import kotlin.test.Test
 import kotlin.test.assertEquals
@@ -19,7 +20,7 @@ class LoaderVersionAliasTest {
         val edited = editLoaderVersionAlias(original, "neoforge-21.11.6-beta")
 
         val node = ObjectMapper().readTree(edited)
-        assertEquals(ROBOTMC_VERSION_ID, node.get("id").asText())
+        assertEquals(DEFAULT_VERSION_ID, node.get("id").asText())
         assertEquals("neoforge-21.11.6-beta", node.get("inheritsFrom").asText())
         assertEquals("release", node.get("type").asText())
         assertEquals("2020-01-01T00:00:00+00:00", node.get("time").asText())
@@ -29,7 +30,7 @@ class LoaderVersionAliasTest {
 
         writeLoaderVersionAlias(minecraft, "neoforge-21.11.6-beta")
         val path = loaderVersionAliasPath(minecraft)
-        assertEquals(minecraft.resolve("versions").resolve(ROBOTMC_VERSION_ID).resolve("$ROBOTMC_VERSION_ID.json"), path)
+        assertEquals(minecraft.resolve("versions").resolve(DEFAULT_VERSION_ID).resolve("$DEFAULT_VERSION_ID.json"), path)
         assertTrue(Files.isRegularFile(path))
         assertEquals("neoforge-21.11.6-beta", readLoaderVersionAliasInherits(minecraft))
         assertFalse(Files.exists(minecraft.resolve("robotmc").resolve("versions")))
