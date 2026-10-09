@@ -1,6 +1,7 @@
 package com.sysbot32.robotmc.installer.config
 
 import com.sysbot32.robotmc.installer.InstallService
+import com.sysbot32.robotmc.installer.prelaunch.downloadFileName
 import io.github.oshai.kotlinlogging.KotlinLogging
 import org.springframework.stereotype.Service
 import java.nio.file.Files
@@ -32,7 +33,7 @@ object InstalledRecord {
     }
 }
 
-fun configFileName(url: String): String = url.split("/").last()
+fun configFileName(url: String): String = downloadFileName(url)
 
 fun isSafeFileName(name: String): Boolean {
     return name.isNotBlank() &&

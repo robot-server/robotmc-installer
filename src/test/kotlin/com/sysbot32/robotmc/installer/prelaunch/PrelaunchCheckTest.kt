@@ -3,6 +3,7 @@ package com.sysbot32.robotmc.installer.prelaunch
 import com.fasterxml.jackson.databind.ObjectMapper
 import com.sysbot32.robotmc.installer.config.DEFAULT_PROFILE_ICON
 import com.sysbot32.robotmc.installer.config.InstallerProperties
+import com.sysbot32.robotmc.installer.config.configFileName
 import com.sysbot32.robotmc.installer.config.gameDirectory
 import com.sysbot32.robotmc.installer.launcher.LauncherService
 import com.sysbot32.robotmc.installer.launcher.STABLE_INSTALLER_JAR
@@ -301,17 +302,26 @@ class PrelaunchCheckTest {
         Files.move(gameDir.resolve("mods/sodium.jar"), gameDir.resolve("mods/sodium-renamed.jar"))
         assertFalse(checkLaunchConfig(minecraft, "robotmc", yaml).match)
 
-        val fabricJars = listOf("fabric-api.jar")
-        val fabricYaml = applicationYaml("fabric", "0.16.14", "1.21.11", fabricJars)
-            .replace("fabric-api.jar'", "fabric-api.jar?token=1'")
+        val fabricYaml = applicationYaml("fabric", "0.16.14", "1.21.11", listOf("fabric-api.jar"))
         Files.writeString(
             minecraft.resolve("launcher_profiles.json"),
             profiles(gameDir, "fabric-loader-0.16.14-1.21.11", null),
         )
-        replaceJars(gameDir.resolve("mods"), fabricJars)
+        replaceJars(gameDir.resolve("mods"), listOf("fabric-api.jar"))
         val fabric = checkLaunchConfig(minecraft, "robotmc", fabricYaml)
         assertTrue(fabric.match)
         assertEquals(setOf("fabric-api.jar"), fabric.remoteJarNames)
+        assertEquals(
+            profileVersionId(ModLoaderType.FABRIC, "0.16.14", "1.21.11"),
+            fabric.remoteLoaderId,
+        )
+        val queryUrl = "https://example.com/download?filename=mod.jar"
+        val queryYaml = fabricYaml.replace("https://cdn.example/mods/fabric-api.jar", queryUrl)
+        replaceJars(gameDir.resolve("mods"), listOf(configFileName(queryUrl)))
+        val query = checkLaunchConfig(minecraft, "robotmc", queryYaml)
+        assertEquals(setOf("download?filename=mod.jar"), query.remoteJarNames)
+        assertEquals(query.remoteJarNames, query.localJarNames)
+        assertTrue(query.match)
         assertEquals(
             profileVersionId(ModLoaderType.FABRIC, "0.16.14", "1.21.11"),
             fabric.remoteLoaderId,

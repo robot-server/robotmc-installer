@@ -55,11 +55,37 @@ private fun argumentValue(arguments: List<String>, name: String): String? {
  * 클래스패스의 로더가 디스크에 설치된 로더와 다르면 true.
  * 클래스패스에서 로더를 못 찾으면 판단하지 않는다.
  */
-fun loaderLaunchDiffers(runningLoaderIds: List<String>, installedLoaderId: String?): Boolean {
+fun loaderLaunchDiffers(
+    runningLoaderIds: List<String>,
+    installedLoaderId: String?,
+    runningMinecraftVersion: String? = null,
+): Boolean {
     if (installedLoaderId.isNullOrBlank() || runningLoaderIds.isEmpty()) {
         return false
     }
-    return runningLoaderIds.none { sameLoader(it, installedLoaderId) }
+    if (runningLoaderIds.none { sameLoader(it, installedLoaderId) }) {
+        return true
+    }
+    val installedMinecraft = minecraftVersionInFabricLoaderId(installedLoaderId) ?: return false
+    return runningMinecraftVersion != null && runningMinecraftVersion != installedMinecraft
+}
+
+private val FABRIC_MINECRAFT_VERSION = Regex("""^fabric-loader-.+-(\d+\.\d+(?:\.\d+)?)$""")
+private val VERSION_DIRECTORY_JAR = Regex("""[/\\]versions[/\\](\d+(?:\.\d+){1,2})[/\\]\1\.jar$""")
+
+fun runningMinecraftVersion(classPath: String?, arguments: List<String> = emptyList()): String? {
+    argumentValue(arguments, "--fml.mcVersion")?.takeIf { it.isNotBlank() }?.let { return it }
+    if (classPath.isNullOrBlank()) {
+        return null
+    }
+    for (entry in classPath.split(':', ';')) {
+        VERSION_DIRECTORY_JAR.find(entry)?.let { return it.groupValues[1] }
+    }
+    return null
+}
+
+private fun minecraftVersionInFabricLoaderId(id: String): String? {
+    return FABRIC_MINECRAFT_VERSION.matchEntire(id)?.groupValues?.get(1)
 }
 
 private fun sameLoader(running: String, installed: String): Boolean {

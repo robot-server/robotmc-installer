@@ -41,9 +41,15 @@ class PrelaunchAgent private constructor() {
                 null
             }
             // 디스크 구성은 맞는데 런처가 예전 로더로 JVM 을 띄운 경우. 설치는 다시 하지 않는다.
+            val classPath = System.getProperty("java.class.path")
+            val arguments = ProcessHandle.current().info().arguments().orElse(emptyArray()).toList()
             val restartLauncher = check != null &&
                 check.match &&
-                loaderLaunchDiffers(currentRunningLoaderIds(), check.launchedLoaderId)
+                loaderLaunchDiffers(
+                    runningLoaderIds(classPath, arguments),
+                    check.launchedLoaderId,
+                    runningMinecraftVersion(classPath, arguments),
+                )
             if (check != null && check.match && !restartLauncher) {
                 return
             }
@@ -74,11 +80,6 @@ class PrelaunchAgent private constructor() {
                 else -> EXIT_INSTALLER_NOT_STARTED
             }
             Runtime.getRuntime().halt(exitCode)
-        }
-
-        private fun currentRunningLoaderIds(): List<String> {
-            val arguments = ProcessHandle.current().info().arguments().orElse(emptyArray()).toList()
-            return runningLoaderIds(System.getProperty("java.class.path"), arguments)
         }
     }
 }

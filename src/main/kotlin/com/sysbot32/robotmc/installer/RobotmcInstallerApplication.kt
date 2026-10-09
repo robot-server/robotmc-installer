@@ -6,6 +6,7 @@ import com.sysbot32.robotmc.installer.config.RemoteInstallerConfig
 import com.sysbot32.robotmc.installer.gui.InstallerSession
 import com.sysbot32.robotmc.installer.gui.InstallerWindow
 import com.sysbot32.robotmc.installer.prelaunch.LAUNCHER_RESTART_DETAIL
+import com.sysbot32.robotmc.installer.prelaunch.installerLaunchCommand
 import com.sysbot32.robotmc.installer.progress.ProgressService
 import com.sysbot32.robotmc.installer.progress.plannedSteps
 import io.github.oshai.kotlinlogging.KotlinLogging
@@ -26,6 +27,10 @@ internal fun startupArguments(
 class RobotmcInstallerApplication
 
 fun main(args: Array<String>) {
+    if (System.getProperty("robotmc.dump-launch-command") == "true") {
+        println(installerLaunchCommand().joinToString("\n"))
+        exitProcess(0)
+    }
     // Spring Boot는 기본으로 java.awt.headless=true 이다. 그 상태면 Compose가 창을 못 연다.
     System.setProperty("java.awt.headless", "false")
     System.setProperty("apple.awt.application.name", "RobotMC Installer")

@@ -75,21 +75,8 @@ private fun installerCodeSource(): Path? {
     return try {
         val application = Class.forName("com.sysbot32.robotmc.installer.RobotmcInstallerApplication")
         val location = application.protectionDomain?.codeSource?.location ?: return null
-        var external = location.toString()
-        if (external.startsWith("jar:")) {
-            external = external.removePrefix("jar:")
-        }
-        if (external.startsWith("nested:")) {
-            external = external.removePrefix("nested:")
-        }
-        val bang = external.indexOf("!/")
-        if (bang >= 0) {
-            external = external.substring(0, bang)
-        }
-        if (external.startsWith("file:")) {
-            external = external.removePrefix("file:")
-        }
-        val file = Path.of(URLDecoder.decode(external, StandardCharsets.UTF_8))
+        val path = installerJarPath(location.toString()) ?: return null
+        val file = Path.of(path)
         if (Files.isRegularFile(file) && file.fileName.toString().endsWith(".jar")) {
             file.toAbsolutePath().normalize()
         } else {
@@ -98,4 +85,32 @@ private fun installerCodeSource(): Path? {
     } catch (exception: Exception) {
         null
     }
+}
+
+/**
+ * Spring Boot bootJar 의 CodeSource 는 `jar:nested:/app.jar/!BOOT-INF/classes/!/` 이다.
+ * 바깥 구분자는 `!/` 가 아니라 `/!` 라서, `!/` 만 찾으면 classes 쪽에서 잘린다.
+ */
+fun installerJarPath(location: String): String? {
+    var external = location
+    if (external.startsWith("jar:")) {
+        external = external.removePrefix("jar:")
+    }
+    if (external.startsWith("nested:")) {
+        external = external.removePrefix("nested:")
+    }
+    val nested = external.indexOf("/!")
+    if (nested >= 0) {
+        external = external.substring(0, nested)
+    } else {
+        val bang = external.indexOf("!/")
+        if (bang >= 0) {
+            external = external.substring(0, bang)
+        }
+    }
+    if (external.startsWith("file:")) {
+        external = external.removePrefix("file:")
+    }
+    val path = URLDecoder.decode(external, StandardCharsets.UTF_8)
+    return path.ifBlank { null }
 }

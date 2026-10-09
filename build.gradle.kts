@@ -147,6 +147,11 @@ val installerJdk = extensions.getByType(JavaToolchainService::class.java).launch
 }
 val installerBootJar = tasks.named<org.springframework.boot.gradle.tasks.bundling.BootJar>("bootJar")
     .flatMap { it.archiveFile }
+
+tasks.withType<Test> {
+    dependsOn(installerBootJar)
+    systemProperty("robotmc.boot.jar", installerBootJar.get().asFile.absolutePath)
+}
 val installerAppImageDir = layout.buildDirectory.dir("installer-app-image")
 val installerAppImageWork = layout.buildDirectory.dir("tmp/installer-app-image")
 

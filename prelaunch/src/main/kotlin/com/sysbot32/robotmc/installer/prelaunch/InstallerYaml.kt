@@ -8,6 +8,15 @@ import java.util.Locale
  * application.yml 의 installer.mod 만 읽는다.
  * 로더 id 형식은 설치기가 프로필에 쓰는 neoforge- 와 fabric-loader- 와 같다.
  */
+/** 설치기가 모드 파일로 쓰는 이름과 같다. 쿼리도 이름에 남긴다. */
+fun downloadFileName(url: String?): String {
+    if (url.isNullOrEmpty()) {
+        return ""
+    }
+    val slash = url.lastIndexOf('/')
+    return if (slash >= 0) url.substring(slash + 1) else url
+}
+
 internal object InstallerYaml {
     data class Parsed(
         val loaderId: String?,
@@ -34,7 +43,7 @@ internal object InstallerYaml {
             for (item in mods) {
                 val entry = item as? Map<*, *> ?: continue
                 val url = text(entry["download-url"]).ifEmpty { text(entry["downloadUrl"]) }
-                val name = urlFileName(url)
+                val name = downloadFileName(url)
                 if (name.isNotEmpty()) {
                     jars += name
                 }
@@ -59,24 +68,7 @@ internal object InstallerYaml {
         }
     }
 
-    fun urlFileName(url: String?): String {
-        if (url.isNullOrBlank()) {
-            return ""
-        }
-        var cut = url.length
-        val query = url.indexOf('?')
-        if (query >= 0) {
-            cut = query
-        }
-        val fragment = url.indexOf('#')
-        if (fragment >= 0 && fragment < cut) {
-            cut = fragment
-        }
-        val path = url.substring(0, cut)
-        val slash = path.lastIndexOf('/')
-        val name = if (slash >= 0) path.substring(slash + 1) else path
-        return name.trim()
-    }
+
 
     private fun map(value: Any?): Map<*, *> {
         return value as? Map<*, *> ?: throw IllegalArgumentException("Manifest is missing a map")
