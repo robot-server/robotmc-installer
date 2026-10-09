@@ -5,12 +5,16 @@ import com.sysbot32.robotmc.installer.config.DEFAULT_PROFILE_ICON
 import com.sysbot32.robotmc.installer.config.InstallerProperties
 import com.sysbot32.robotmc.installer.config.gameDirectory
 import com.sysbot32.robotmc.installer.launcher.LauncherService
+import com.sysbot32.robotmc.installer.launcher.STABLE_INSTALLER_JAR
+import com.sysbot32.robotmc.installer.launcher.stableInstallerCommand
 import com.sysbot32.robotmc.installer.mod.loader.ModLoaderType
 import com.sysbot32.robotmc.installer.mod.loader.profileVersionId
 import org.springframework.http.converter.json.Jackson2ObjectMapperBuilder
 import java.nio.file.Files
+import java.nio.file.LinkOption
 import java.nio.file.Path
 import java.nio.file.StandardOpenOption
+import java.util.Comparator
 import java.util.concurrent.TimeUnit
 import java.util.jar.JarFile
 import javax.tools.ToolProvider
@@ -146,6 +150,106 @@ class PrelaunchCheckTest {
             installerCommand(root.resolve("jdk"), root.resolve("classes"), "classes", "/opt/java"),
         )
         assertNull(appImageLauncher(Path.of(System.getProperty("java.home"))))
+    }
+
+    @Test
+    fun installKeepsTheWholeAppImageOrOnlyTheJar() {
+        val javaBin = installerJavaExecutable()
+        val root = Files.createTempDirectory("robotmc-keep")
+        val home = root.resolve("home")
+        val minecraft = root.resolve("My Minecraft")
+        Files.createDirectories(minecraft)
+        val profilesPath = minecraft.resolve("launcher_profiles.json")
+        Files.writeString(profilesPath, profiles(gameDirectory(minecraft), "RobotMC", null))
+        val service = LauncherService(
+            InstallerProperties(
+                minecraft = InstallerProperties.Minecraft(version = "1.21.11", directory = minecraft),
+                mod = InstallerProperties.Mod(
+                    loader = InstallerProperties.Mod.Loader(ModLoaderType.NEO_FORGE, "21.11.6-beta"),
+                ),
+            ),
+            Jackson2ObjectMapperBuilder.json().build(),
+        )
+
+        val originalJar = root.resolve("Downloads/robotmc-installer-1.0.0.jar")
+        Files.createDirectories(originalJar.parent)
+        Files.write(originalJar, byteArrayOf(1, 2, 3))
+        service.applyRobotMcProfile(
+            profilesPath,
+            home,
+            installerCommand = listOf(javaBin, "-jar", originalJar.toString()),
+        )
+        val jarCopy = home.resolve(STABLE_INSTALLER_JAR).toAbsolutePath().normalize()
+        assertEquals(
+            listOf(javaBin, "-jar", jarCopy.toString()),
+            AgentOptions.read(home.resolve("prelaunch-robotmc.properties")).installerCommand,
+        )
+        assertEquals(listOf(1, 2, 3), bytes(jarCopy))
+        Files.delete(originalJar)
+        assertTrue(Files.isRegularFile(jarCopy))
+        Files.write(root.resolve("Downloads/newer.jar"), byteArrayOf(9))
+        service.applyRobotMcProfile(
+            profilesPath,
+            home,
+            installerCommand = listOf(javaBin, "-jar", root.resolve("Downloads/newer.jar").toString()),
+        )
+        assertEquals(listOf(9), bytes(jarCopy))
+
+        val app = root.resolve("Downloads/RobotMC Installer.app")
+        val launcher = app.resolve("Contents/MacOS").resolve(INSTALLER_APP_NAME)
+        Files.createDirectories(launcher.parent)
+        Files.writeString(launcher, "launcher")
+        Files.createDirectories(app.resolve("Contents/app"))
+        Files.write(app.resolve("Contents/app/robotmc-installer.jar"), byteArrayOf(7))
+        Files.createDirectories(app.resolve("Contents/runtime"))
+        Files.writeString(app.resolve("Contents/runtime/release"), "21")
+        Files.createSymbolicLink(app.resolve("Contents/Home"), Path.of("runtime"))
+        service.applyRobotMcProfile(profilesPath, home, installerCommand = listOf(launcher.toString()))
+        val copiedLauncher = home.resolve("RobotMC Installer.app/Contents/MacOS").resolve(INSTALLER_APP_NAME)
+            .toAbsolutePath().normalize()
+        val storedImage = AgentOptions.read(home.resolve("prelaunch-robotmc.properties")).installerCommand
+        assertEquals(listOf(copiedLauncher.toString()), storedImage)
+        assertEquals("launcher", Files.readString(copiedLauncher))
+        assertTrue(copiedLauncher.toFile().canExecute())
+        assertEquals(listOf(7), bytes(home.resolve("RobotMC Installer.app/Contents/app/robotmc-installer.jar")))
+        assertEquals("21", Files.readString(home.resolve("RobotMC Installer.app/Contents/runtime/release")))
+        assertEquals(Path.of("runtime"), Files.readSymbolicLink(home.resolve("RobotMC Installer.app/Contents/Home")))
+        deleteTree(app)
+        assertTrue(Files.isRegularFile(copiedLauncher))
+        assertTrue(Files.isRegularFile(jarCopy))
+
+        val classpath = listOf(javaBin, "-cp", "classes", INSTALLER_MAIN_CLASS)
+        assertEquals(classpath, stableInstallerCommand(classpath, home.resolve("unused")))
+
+        val linuxHome = root.resolve("linux-home")
+        val linux = root.resolve("dist/RobotMC Installer")
+        val linuxLauncher = linux.resolve("bin").resolve(INSTALLER_APP_NAME)
+        Files.createDirectories(linux.resolve("lib/runtime"))
+        Files.createDirectories(linux.resolve("lib/app"))
+        Files.createDirectories(linuxLauncher.parent)
+        Files.writeString(linuxLauncher, "linux")
+        Files.write(linux.resolve("lib/app/robotmc-installer.jar"), byteArrayOf(8))
+        val storedLinux = stableInstallerCommand(listOf(linuxLauncher.toString()), linuxHome)
+        assertEquals(
+            listOf(linuxHome.resolve("RobotMC Installer/bin").resolve(INSTALLER_APP_NAME).toAbsolutePath().normalize().toString()),
+            storedLinux,
+        )
+        assertEquals(listOf(8), bytes(linuxHome.resolve("RobotMC Installer/lib/app/robotmc-installer.jar")))
+        assertFalse(Files.exists(linuxHome.resolve(STABLE_INSTALLER_JAR)))
+
+        val windowsHome = root.resolve("windows-home")
+        val windows = root.resolve("win/RobotMC Installer")
+        val exe = windows.resolve("$INSTALLER_APP_NAME.exe")
+        Files.createDirectories(windows.resolve("runtime"))
+        Files.createDirectories(windows.resolve("app"))
+        Files.write(exe, byteArrayOf(4))
+        Files.write(windows.resolve("app/robotmc-installer.jar"), byteArrayOf(5))
+        val storedWindows = stableInstallerCommand(listOf(exe.toString()), windowsHome)
+        assertEquals(
+            listOf(windowsHome.resolve("RobotMC Installer/$INSTALLER_APP_NAME.exe").toAbsolutePath().normalize().toString()),
+            storedWindows,
+        )
+        assertEquals(listOf(5), bytes(windowsHome.resolve("RobotMC Installer/app/robotmc-installer.jar")))
     }
 
     @Test
@@ -562,6 +666,17 @@ private fun profiles(gameDir: Path, lastVersionId: String, javaArgs: String?): S
           }
         }
     """.trimIndent()
+}
+
+private fun bytes(path: Path): List<Int> = Files.readAllBytes(path).map { it.toInt() }
+
+private fun deleteTree(path: Path) {
+    if (!Files.exists(path, LinkOption.NOFOLLOW_LINKS)) {
+        return
+    }
+    Files.walk(path).use { stream ->
+        stream.sorted(Comparator.reverseOrder()).forEach { Files.deleteIfExists(it) }
+    }
 }
 
 private fun writeAlias(minecraft: Path, versionId: String, inheritsFrom: String) {

@@ -57,13 +57,14 @@ class LauncherService(
         val bundledFile = home.resolve("bundled-application.yml")
         Files.writeString(bundledFile, bundledYaml)
         val optionsFile = home.resolve("prelaunch-$profileKey.properties")
+        val storedCommand = stableInstallerCommand(installerCommand, home)
         AgentOptions(
             installerProperties.minecraft.directory,
             profileKey,
             manifestUrl,
             cacheFile,
             bundledFile,
-            installerCommand,
+            storedCommand,
         ).write(optionsFile)
         val edited = editRobotMcLauncherProfile(
             Files.readString(path),
