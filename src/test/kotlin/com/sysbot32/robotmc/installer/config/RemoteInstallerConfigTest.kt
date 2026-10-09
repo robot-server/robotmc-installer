@@ -29,6 +29,72 @@ import kotlin.test.assertTrue
 
 class RemoteInstallerConfigTest {
     @Test
+    fun profileNameUsesTheConfiguredValueAndFallsBackWhenBlank() {
+        assertEquals(
+            "Pack From Config",
+            bindInstaller(
+                """
+                installer:
+                  profile-name: "  Pack From Config  "
+                  minecraft:
+                    version: "1.21.11"
+                """.trimIndent(),
+            ).profileDisplayName(),
+        )
+        assertEquals(
+            DEFAULT_PROFILE_NAME,
+            bindInstaller(
+                """
+                installer:
+                  profile-name: " "
+                  minecraft:
+                    version: "1.21.11"
+                """.trimIndent(),
+            ).profileDisplayName(),
+        )
+        assertEquals(
+            DEFAULT_PROFILE_NAME,
+            bindInstaller(
+                """
+                installer:
+                  minecraft:
+                    version: "1.21.11"
+                """.trimIndent(),
+            ).profileDisplayName(),
+        )
+        val bundled = readBundledYaml()
+        val installer = (Yaml().load(bundled) as Map<*, *>)["installer"] as Map<*, *>
+        val bound = bindInstaller(bundled)
+        assertEquals(installer["profile-name"].toString(), bound.profileName)
+        assertEquals(DEFAULT_PROFILE_NAME, bound.profileDisplayName())
+        assertEquals(installer["profile-key"].toString(), bound.profileKey)
+        assertEquals(DEFAULT_PROFILE_KEY, bound.launcherProfileKey())
+        assertEquals(installer["version-id"].toString(), bound.versionId)
+        assertEquals(DEFAULT_VERSION_ID, bound.launcherVersionId())
+        assertEquals(installer["game-directory-name"].toString(), bound.gameDirectoryName)
+        assertEquals(DEFAULT_GAME_DIRECTORY_NAME, bound.gameDirectory().fileName.toString())
+        assertEquals(installer["profile-icon"].toString(), bound.profileIcon)
+        assertEquals(DEFAULT_PROFILE_ICON, bound.profileDisplayIcon())
+        val custom = bindInstaller(
+            """
+            installer:
+              profile-name: My Pack
+              profile-key: mypack
+              version-id: "../Nope"
+              game-directory-name: " "
+              profile-icon: "  "
+              minecraft:
+                version: "1.21.11"
+            """.trimIndent(),
+        )
+        assertEquals("My Pack", custom.profileDisplayName())
+        assertEquals("mypack", custom.launcherProfileKey())
+        assertEquals(DEFAULT_VERSION_ID, custom.launcherVersionId())
+        assertEquals(DEFAULT_GAME_DIRECTORY_NAME, custom.gameDirectory().fileName.toString())
+        assertEquals(DEFAULT_PROFILE_ICON, custom.profileDisplayIcon())
+    }
+
+    @Test
     fun bundledManifestPointsAtMainApplicationYml() {
         assertEquals(MAIN_MANIFEST, manifestUrl(readBundledYaml()))
     }
@@ -55,6 +121,7 @@ class RemoteInstallerConfigTest {
         withStartup(first!!) { context ->
             val properties = context.getBean(InstallerProperties::class.java)
             assertEquals("1.21.12", properties.minecraft.version)
+            assertEquals("Remote Pack", properties.profileDisplayName())
             assertEquals(ModLoaderType.FABRIC, properties.mod?.loader?.type)
             assertEquals("0.16.0", properties.mod?.loader?.version)
             assertEquals(listOf("https://cdn.modrinth.com/data/only/one.jar"), properties.mod?.mods?.map { it.downloadUrl })
@@ -484,6 +551,7 @@ installer:
       version: "1.2.0"
       url: https://example.com/robotmc-installer.jar
       sha256: $SHA
+  profile-name: Remote Pack
   minecraft:
     version: "1.21.12"
   mod:

@@ -165,7 +165,7 @@ class InstallerSession(
 
         fun promptFor(mode: Mode): String = when (mode) {
             Mode.INSTALL -> "서버 접속에 필요한 모드 로더 및 모드를 설치할까요?\n기존 설치 모드는 mods_old로 옮겨져요."
-            Mode.UNINSTALL -> "설치된 모드 로더 및 모드를 제거할까요?"
+            Mode.UNINSTALL -> "이 설치의 프로필과 게임 폴더를 제거할까요?\n세이브는 그대로 둬요."
         }
 
         fun actionLabel(mode: Mode): String = when (mode) {

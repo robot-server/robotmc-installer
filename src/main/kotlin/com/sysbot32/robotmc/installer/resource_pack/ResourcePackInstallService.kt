@@ -5,15 +5,14 @@ import com.sysbot32.robotmc.installer.config.InstalledRecord
 import com.sysbot32.robotmc.installer.config.InstallerProperties
 import com.sysbot32.robotmc.installer.config.configFileName
 import com.sysbot32.robotmc.installer.config.deleteInstalledFile
+import com.sysbot32.robotmc.installer.config.gameDirectory
 import com.sysbot32.robotmc.installer.config.recordedNames
-import com.sysbot32.robotmc.installer.config.uninstallFileNames
 import com.sysbot32.robotmc.installer.progress.ProgressService
 import io.github.oshai.kotlinlogging.KotlinLogging
 import org.springframework.stereotype.Service
 import org.springframework.web.client.RestClient
 import org.springframework.web.client.toEntity
 import java.nio.file.Files
-import kotlin.io.path.createDirectory
 
 private val log = KotlinLogging.logger { }
 
@@ -27,13 +26,12 @@ class ResourcePackInstallService(
         get() = 40
 
     override fun install() {
-        val resourcePackDir = installerProperties.minecraft.directory.resolve("resourcepacks").also { log.info { it } }
-        if (!Files.exists(resourcePackDir)) {
-            resourcePackDir.createDirectory()
-        }
+        val gameDir = installerProperties.gameDirectory()
+        val resourcePackDir = gameDir.resolve("resourcepacks").also { log.info { it } }
+        Files.createDirectories(resourcePackDir)
         resourcePackDir.toFile().listFiles()?.forEach { log.info { it } }
         val current = installerProperties.resourcePacks.map { configFileName(it.downloadUrl) }.toSet()
-        val previous = recordedNames(InstalledRecord.read(installerProperties.minecraft.directory), "resourcepacks")
+        val previous = recordedNames(InstalledRecord.read(gameDir), "resourcepacks")
         for (fileName in previous) {
             if (fileName in current) {
                 continue
@@ -57,19 +55,9 @@ class ResourcePackInstallService(
     }
 
     override fun uninstall() {
-        val resourcePackDir = installerProperties.minecraft.directory.resolve("resourcepacks").also { log.info { it } }
-        val configured = installerProperties.resourcePacks.map { configFileName(it.downloadUrl) }
-        val names = uninstallFileNames(
-            configured,
-            InstalledRecord.read(installerProperties.minecraft.directory),
-            "resourcepacks",
-        )
-        for (fileName in names) {
-            this.progressService.setStatus("리소스 팩 삭제 중: $fileName")
-            deleteInstalledFile(resourcePackDir, fileName)
-            if (fileName in configured) {
-                this.progressService.step(-1)
-            }
+        val count = installerProperties.resourcePacks.size
+        if (count > 0) {
+            this.progressService.step(-count)
         }
     }
 }

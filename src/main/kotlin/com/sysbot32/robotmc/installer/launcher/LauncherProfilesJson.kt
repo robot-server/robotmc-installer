@@ -1,6 +1,14 @@
 package com.sysbot32.robotmc.installer.launcher
 
+import com.fasterxml.jackson.databind.ObjectMapper
+import com.fasterxml.jackson.databind.node.ObjectNode
+import com.sysbot32.robotmc.installer.config.DEFAULT_PROFILE_ICON
+import com.sysbot32.robotmc.installer.config.DEFAULT_PROFILE_KEY
+import com.sysbot32.robotmc.installer.config.DEFAULT_VERSION_ID
+import com.sysbot32.robotmc.installer.config.pathSegment
+import java.nio.file.Path
 import java.time.OffsetDateTime
+import java.time.ZoneOffset
 
 /**
  * https://minecraft.fandom.com/wiki/Launcher_profiles.json
@@ -78,4 +86,94 @@ data class LauncherProfilesJson(
             val width: Int,
         )
     }
+}
+
+/**
+ * [profileKey] 프로필만 만들거나 고친다.
+ * lastVersionId 는 [versionId] 다. 로더 버전은 그 id 의 version JSON 이 가리킨다.
+ * 다른 프로필은 건드리지 않는다.
+ * 데이터 클래스로 다시 쓰면 settings, 계정, 모르는 프로필 필드가 빠진다.
+ */
+fun editRobotMcLauncherProfile(
+    document: String,
+    gameDirectory: Path,
+    profileName: String,
+    profileKey: String = DEFAULT_PROFILE_KEY,
+    versionId: String = DEFAULT_VERSION_ID,
+    profileIcon: String = DEFAULT_PROFILE_ICON,
+): String {
+    val mapper = ObjectMapper()
+    val root = mapper.readTree(document)
+    if (root !is ObjectNode) {
+        return document
+    }
+    val profilesNode = root.get("profiles")
+    val profiles = when {
+        profilesNode is ObjectNode -> profilesNode
+        profilesNode == null || profilesNode.isNull -> root.putObject("profiles")
+        else -> return document
+    }
+    val gameDir = gameDirectory.toAbsolutePath().normalize().toString()
+    val key = pathSegment(profileKey, DEFAULT_PROFILE_KEY)
+    val version = pathSegment(versionId, DEFAULT_VERSION_ID)
+    val existing = profiles.get(key)
+    val profile = if (existing is ObjectNode) existing else profiles.putObject(key)
+    var changed = existing !is ObjectNode
+    if (existing !is ObjectNode) {
+        profile.put("type", "custom")
+        profile.put("created", OffsetDateTime.now(ZoneOffset.UTC).toString())
+    }
+    if (profile.putTextIfDifferent("name", profileName)) {
+        changed = true
+    }
+    if (profile.putTextIfDifferent("icon", profileIcon)) {
+        changed = true
+    }
+    if (profile.putTextIfDifferent("lastVersionId", version)) {
+        changed = true
+    }
+    if (profile.putTextIfDifferent("gameDir", gameDir)) {
+        changed = true
+    }
+    if (!changed) {
+        return document
+    }
+    return mapper.writeValueAsString(root)
+}
+
+/**
+ * [profileKey] 항목만 뺀다. 그 키가 선택된 프로필이면 선택도 뺀다.
+ * 다른 프로필과 최상위 필드는 둔다.
+ */
+fun removeLauncherProfile(document: String, profileKey: String): String {
+    val mapper = ObjectMapper()
+    val root = mapper.readTree(document)
+    val profiles = root.get("profiles")
+    if (root !is ObjectNode || profiles !is ObjectNode) {
+        return document
+    }
+    val key = pathSegment(profileKey, DEFAULT_PROFILE_KEY)
+    var changed = false
+    if (profiles.has(key)) {
+        profiles.remove(key)
+        changed = true
+    }
+    val selected = root.get("selectedProfile")
+    if (selected != null && selected.isTextual && selected.asText() == key) {
+        root.remove("selectedProfile")
+        changed = true
+    }
+    if (!changed) {
+        return document
+    }
+    return mapper.writeValueAsString(root)
+}
+
+private fun ObjectNode.putTextIfDifferent(field: String, value: String): Boolean {
+    val current = this.get(field)
+    if (current != null && current.isTextual && current.asText() == value) {
+        return false
+    }
+    this.put(field, value)
+    return true
 }

@@ -368,13 +368,6 @@ private fun ColumnScope.ConfirmPhase(
                         }
                     }
                 }
-                if (state.mode == InstallerProperties.Mode.UNINSTALL && properties.servers.isNotEmpty()) {
-                    Text(
-                        "서버 목록은 그대로 둬요.",
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    )
-                }
             }
         }
         Row(
