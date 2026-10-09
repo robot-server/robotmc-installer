@@ -2,6 +2,7 @@ package com.sysbot32.robotmc.installer.launcher
 
 import com.fasterxml.jackson.databind.ObjectMapper
 import com.fasterxml.jackson.databind.node.ObjectNode
+import com.sysbot32.robotmc.installer.config.DEFAULT_PROFILE_ICON
 import com.sysbot32.robotmc.installer.config.DEFAULT_PROFILE_KEY
 import com.sysbot32.robotmc.installer.config.DEFAULT_VERSION_ID
 import com.sysbot32.robotmc.installer.config.pathSegment
@@ -99,6 +100,7 @@ fun editRobotMcLauncherProfile(
     profileName: String,
     profileKey: String = DEFAULT_PROFILE_KEY,
     versionId: String = DEFAULT_VERSION_ID,
+    profileIcon: String = DEFAULT_PROFILE_ICON,
 ): String {
     val mapper = ObjectMapper()
     val root = mapper.readTree(document)
@@ -119,10 +121,12 @@ fun editRobotMcLauncherProfile(
     var changed = existing !is ObjectNode
     if (existing !is ObjectNode) {
         profile.put("type", "custom")
-        profile.put("icon", "")
         profile.put("created", OffsetDateTime.now(ZoneOffset.UTC).toString())
     }
     if (profile.putTextIfDifferent("name", profileName)) {
+        changed = true
+    }
+    if (profile.putTextIfDifferent("icon", profileIcon)) {
         changed = true
     }
     if (profile.putTextIfDifferent("lastVersionId", version)) {
