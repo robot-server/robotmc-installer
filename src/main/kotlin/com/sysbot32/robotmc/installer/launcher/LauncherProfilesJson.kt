@@ -1,6 +1,11 @@
 package com.sysbot32.robotmc.installer.launcher
 
+import com.fasterxml.jackson.databind.ObjectMapper
+import com.fasterxml.jackson.databind.node.ObjectNode
+import java.nio.file.Path
 import java.time.OffsetDateTime
+
+const val ROBOTMC_PROFILE_NAME = "RobotMC"
 
 /**
  * https://minecraft.fandom.com/wiki/Launcher_profiles.json
@@ -78,4 +83,47 @@ data class LauncherProfilesJson(
             val width: Int,
         )
     }
+}
+
+/**
+ * [profileVersionId] 와 같은 lastVersionId 프로필의 보이는 이름과 gameDir 만 바꾼다.
+ * 데이터 클래스로 다시 쓰면 settings, 계정, 모르는 프로필 필드가 빠진다.
+ */
+fun editRobotMcLauncherProfile(
+    document: String,
+    profileVersionId: String,
+    gameDirectory: Path,
+): String {
+    val mapper = ObjectMapper()
+    val root = mapper.readTree(document)
+    val profiles = root.get("profiles")
+    if (root !is ObjectNode || profiles !is ObjectNode) {
+        return document
+    }
+    val gameDir = gameDirectory.toAbsolutePath().normalize().toString()
+    var changed = false
+    for (entry in profiles.properties()) {
+        val profile = entry.value
+        if (profile !is ObjectNode) {
+            continue
+        }
+        val version = profile.get("lastVersionId")
+        if (version == null || !version.isTextual || version.asText() != profileVersionId) {
+            continue
+        }
+        val name = profile.get("name")
+        val directory = profile.get("gameDir")
+        val alreadyNamed = name != null && name.isTextual && name.asText() == ROBOTMC_PROFILE_NAME
+        val alreadyPlaced = directory != null && directory.isTextual && directory.asText() == gameDir
+        if (alreadyNamed && alreadyPlaced) {
+            continue
+        }
+        profile.put("name", ROBOTMC_PROFILE_NAME)
+        profile.put("gameDir", gameDir)
+        changed = true
+    }
+    if (!changed) {
+        return document
+    }
+    return mapper.writeValueAsString(root)
 }

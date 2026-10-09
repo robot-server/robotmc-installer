@@ -99,7 +99,7 @@ class InstalledRecordService(
         get() = 45
 
     override fun install() {
-        val directory = this.installerProperties.minecraft.directory
+        val directory = gameDirectory(this.installerProperties.minecraft.directory)
         InstalledRecord.write(directory, installedPaths(this.installerProperties))
         log.info { InstalledRecord.file(directory) }
     }

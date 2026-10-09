@@ -4,6 +4,8 @@ import com.sysbot32.robotmc.installer.mod.ModInstallService
 import com.sysbot32.robotmc.installer.mod.loader.ModLoaderType
 import com.sysbot32.robotmc.installer.progress.ProgressService
 import com.sysbot32.robotmc.installer.resource_pack.ResourcePackInstallService
+import com.sysbot32.robotmc.installer.server.ServerService
+import com.sysbot32.robotmc.installer.server.ServersDat
 import org.springframework.web.client.RestClient
 import java.nio.file.Files
 import java.nio.file.Path
@@ -66,7 +68,11 @@ class InstalledRecordTest {
 
         InstalledRecordService(properties).install()
 
-        assertEquals(listOf("mods/good.jar", "resourcepacks/pack.zip"), InstalledRecord.read(minecraft))
+        assertEquals(
+            listOf("mods/good.jar", "resourcepacks/pack.zip"),
+            InstalledRecord.read(expectedGameDir(minecraft)),
+        )
+        assertFalse(Files.exists(InstalledRecord.file(minecraft)))
         assertTrue(InstalledRecordService(properties).order > packService(properties).order)
         assertTrue(packService(properties).order > modService(properties).order)
     }
@@ -74,12 +80,18 @@ class InstalledRecordTest {
     @Test
     fun reinstallRemovesAPreviouslyRecordedResourcePack() {
         val minecraft = Files.createTempDirectory("installed-record")
-        val packs = minecraft.resolve("resourcepacks")
+        val packs = expectedGameDir(minecraft).resolve("resourcepacks")
+        val minecraftPacks = minecraft.resolve("resourcepacks")
         Files.createDirectories(packs)
+        Files.createDirectories(minecraftPacks)
         Files.writeString(packs.resolve("a.zip"), "a")
         Files.writeString(packs.resolve("b.zip"), "b")
         Files.writeString(packs.resolve("user.zip"), "user")
-        InstalledRecord.write(minecraft, listOf("resourcepacks/a.zip"))
+        Files.writeString(minecraftPacks.resolve("a.zip"), "keep-a")
+        Files.writeString(minecraftPacks.resolve("b.zip"), "keep-b")
+        Files.writeString(minecraftPacks.resolve("user.zip"), "keep-user")
+        InstalledRecord.write(expectedGameDir(minecraft), listOf("resourcepacks/a.zip"))
+        InstalledRecord.write(minecraft, listOf("resourcepacks/user.zip"))
         val properties = properties(
             minecraft,
             mods = emptyList(),
@@ -90,28 +102,117 @@ class InstalledRecordTest {
         InstalledRecordService(properties).install()
 
         assertFalse(Files.exists(packs.resolve("a.zip")))
-        assertTrue(Files.exists(packs.resolve("b.zip")))
-        assertTrue(Files.exists(packs.resolve("user.zip")))
-        assertEquals(listOf("resourcepacks/b.zip"), InstalledRecord.read(minecraft))
+        assertEquals("b", Files.readString(packs.resolve("b.zip")))
+        assertEquals("user", Files.readString(packs.resolve("user.zip")))
+        assertEquals("keep-a", Files.readString(minecraftPacks.resolve("a.zip")))
+        assertEquals("keep-b", Files.readString(minecraftPacks.resolve("b.zip")))
+        assertEquals("keep-user", Files.readString(minecraftPacks.resolve("user.zip")))
+        assertEquals(listOf("resourcepacks/b.zip"), InstalledRecord.read(expectedGameDir(minecraft)))
+        assertEquals(listOf("resourcepacks/user.zip"), InstalledRecord.read(minecraft))
 
         packService(properties).uninstall()
         assertFalse(Files.exists(packs.resolve("b.zip")))
-        assertTrue(Files.exists(packs.resolve("user.zip")))
+        assertEquals("user", Files.readString(packs.resolve("user.zip")))
+        assertEquals("keep-b", Files.readString(minecraftPacks.resolve("b.zip")))
+        assertEquals("keep-user", Files.readString(minecraftPacks.resolve("user.zip")))
+    }
+
+    @Test
+    fun installMovesExistingModsOnlyInsideTheGameDirectory() {
+        val minecraft = Files.createTempDirectory("installed-record")
+        val gameDir = expectedGameDir(minecraft)
+        Files.createDirectories(gameDir.resolve("mods"))
+        Files.createDirectories(minecraft.resolve("mods"))
+        Files.createDirectories(minecraft.resolve("mods_old"))
+        Files.writeString(gameDir.resolve("mods/leftover.jar"), "game")
+        Files.writeString(gameDir.resolve("mods/current.jar"), "current")
+        Files.writeString(minecraft.resolve("mods/leftover.jar"), "vanilla-mods")
+        Files.writeString(minecraft.resolve("mods/current.jar"), "vanilla-current")
+        Files.writeString(minecraft.resolve("mods_old/leftover.jar"), "vanilla-old")
+        Files.createDirectories(minecraft.resolve("versions"))
+        Files.writeString(minecraft.resolve("versions/keep.txt"), "version")
+        Files.createDirectories(minecraft.resolve("libraries"))
+        Files.writeString(minecraft.resolve("libraries/keep.txt"), "lib")
+        Files.createDirectories(minecraft.resolve("assets"))
+        Files.writeString(minecraft.resolve("assets/keep.txt"), "assets")
+        Files.createDirectories(minecraft.resolve("saves/World"))
+        Files.writeString(minecraft.resolve("saves/World/level.dat"), "save")
+        val properties = properties(
+            minecraft,
+            mods = listOf("https://example.com/current.jar"),
+            packs = emptyList(),
+        )
+
+        modService(properties).install()
+
+        assertEquals("game", Files.readString(gameDir.resolve("mods_old/leftover.jar")))
+        assertFalse(Files.exists(gameDir.resolve("mods/leftover.jar")))
+        assertEquals("current", Files.readString(gameDir.resolve("mods/current.jar")))
+        assertEquals("current", Files.readString(gameDir.resolve("mods_old/current.jar")))
+        assertEquals("vanilla-mods", Files.readString(minecraft.resolve("mods/leftover.jar")))
+        assertEquals("vanilla-current", Files.readString(minecraft.resolve("mods/current.jar")))
+        assertEquals("vanilla-old", Files.readString(minecraft.resolve("mods_old/leftover.jar")))
+        assertFalse(Files.exists(minecraft.resolve("mods_old/current.jar")))
+        assertEquals("version", Files.readString(minecraft.resolve("versions/keep.txt")))
+        assertEquals("lib", Files.readString(minecraft.resolve("libraries/keep.txt")))
+        assertEquals("assets", Files.readString(minecraft.resolve("assets/keep.txt")))
+        assertEquals("save", Files.readString(minecraft.resolve("saves/World/level.dat")))
+        assertFalse(Files.exists(gameDir.resolve("saves")))
+        assertFalse(Files.exists(gameDir.resolve("versions")))
+        assertFalse(Files.exists(gameDir.resolve("libraries")))
+        assertFalse(Files.exists(gameDir.resolve("assets")))
+        assertEquals(gameDir, gameDirectory(minecraft))
+    }
+
+    @Test
+    fun serverListIsWrittenOnlyUnderTheGameDirectory() {
+        val minecraft = Files.createTempDirectory("installed-record")
+        val gameDir = expectedGameDir(minecraft)
+        Files.writeString(minecraft.resolve("servers.dat"), "vanilla")
+        Files.createDirectories(minecraft.resolve("saves/World"))
+        Files.writeString(minecraft.resolve("saves/World/level.dat"), "save")
+        val properties = properties(minecraft, mods = emptyList(), packs = emptyList()).copy(
+            servers = listOf(ServersDat.Server(ip = "minecraft.o-r.cc", name = "Robot Server")),
+        )
+        val service = ServerService(properties, ProgressService())
+
+        service.install()
+
+        assertEquals("vanilla", Files.readString(minecraft.resolve("servers.dat")))
+        assertTrue(Files.isRegularFile(gameDir.resolve("servers.dat")))
+        assertFalse(Files.exists(gameDir.resolve("saves")))
+        assertEquals("save", Files.readString(minecraft.resolve("saves/World/level.dat")))
+        assertEquals(listOf("minecraft.o-r.cc"), service.getServers().servers.map { it.ip })
+        assertEquals(listOf("Robot Server"), service.getServers().servers.map { it.name })
+
+        service.uninstall()
+        assertTrue(Files.isRegularFile(gameDir.resolve("servers.dat")))
+        assertEquals("vanilla", Files.readString(minecraft.resolve("servers.dat")))
     }
 
     @Test
     fun uninstallDeletesTheUnionAndLeavesNamesThatEscapeTheFolder() {
         val minecraft = Files.createTempDirectory("installed-record")
+        val gameDir = expectedGameDir(minecraft)
+        Files.createDirectories(gameDir.resolve("mods"))
+        Files.createDirectories(gameDir.resolve("resourcepacks"))
+        Files.writeString(gameDir.resolve("mods/old.jar"), "old")
+        Files.writeString(gameDir.resolve("mods/current.jar"), "current")
+        Files.writeString(gameDir.resolve("mods/user.jar"), "user")
+        Files.writeString(gameDir.resolve("outside.txt"), "outside")
+        Files.writeString(gameDir.resolve("resourcepacks/old.zip"), "old")
+        Files.writeString(gameDir.resolve("resourcepacks/current.zip"), "current")
+        Files.writeString(gameDir.resolve("servers.dat"), "game-servers")
         Files.createDirectories(minecraft.resolve("mods"))
         Files.createDirectories(minecraft.resolve("resourcepacks"))
-        Files.writeString(minecraft.resolve("mods/old.jar"), "old")
-        Files.writeString(minecraft.resolve("mods/current.jar"), "current")
-        Files.writeString(minecraft.resolve("mods/user.jar"), "user")
-        Files.writeString(minecraft.resolve("outside.txt"), "outside")
-        Files.writeString(minecraft.resolve("resourcepacks/old.zip"), "old")
-        Files.writeString(minecraft.resolve("resourcepacks/current.zip"), "current")
+        Files.writeString(minecraft.resolve("mods/old.jar"), "keep-old")
+        Files.writeString(minecraft.resolve("mods/current.jar"), "keep-current")
+        Files.writeString(minecraft.resolve("mods/user.jar"), "keep-user")
+        Files.writeString(minecraft.resolve("resourcepacks/old.zip"), "keep-old")
+        Files.writeString(minecraft.resolve("resourcepacks/current.zip"), "keep-current")
+        Files.writeString(minecraft.resolve("servers.dat"), "keep-servers")
         InstalledRecord.write(
-            minecraft,
+            gameDir,
             listOf(
                 "mods/old.jar",
                 "mods/../outside.txt",
@@ -120,23 +221,36 @@ class InstalledRecordTest {
                 "resourcepacks/../outside.txt",
             ),
         )
+        InstalledRecord.write(minecraft, listOf("mods/user.jar", "resourcepacks/current.zip"))
         val properties = properties(
             minecraft,
             mods = listOf("https://example.com/current.jar", "https://example.com/.."),
             packs = listOf("https://example.com/current.zip"),
-        )
+        ).copy(servers = listOf(ServersDat.Server(ip = "minecraft.o-r.cc", name = "Robot Server")))
 
         modService(properties).uninstall()
         packService(properties).uninstall()
+        ServerService(properties, ProgressService()).uninstall()
 
-        assertFalse(Files.exists(minecraft.resolve("mods/old.jar")))
-        assertFalse(Files.exists(minecraft.resolve("mods/current.jar")))
-        assertTrue(Files.exists(minecraft.resolve("mods/user.jar")))
-        assertTrue(Files.exists(minecraft.resolve("outside.txt")))
-        assertTrue(Files.exists(minecraft.resolve("mods")))
-        assertFalse(Files.exists(minecraft.resolve("resourcepacks/old.zip")))
-        assertFalse(Files.exists(minecraft.resolve("resourcepacks/current.zip")))
+        assertFalse(Files.exists(gameDir.resolve("mods/old.jar")))
+        assertFalse(Files.exists(gameDir.resolve("mods/current.jar")))
+        assertEquals("user", Files.readString(gameDir.resolve("mods/user.jar")))
+        assertEquals("outside", Files.readString(gameDir.resolve("outside.txt")))
+        assertTrue(Files.exists(gameDir.resolve("mods")))
+        assertFalse(Files.exists(gameDir.resolve("resourcepacks/old.zip")))
+        assertFalse(Files.exists(gameDir.resolve("resourcepacks/current.zip")))
+        assertEquals("game-servers", Files.readString(gameDir.resolve("servers.dat")))
+        assertEquals("keep-old", Files.readString(minecraft.resolve("mods/old.jar")))
+        assertEquals("keep-current", Files.readString(minecraft.resolve("mods/current.jar")))
+        assertEquals("keep-user", Files.readString(minecraft.resolve("mods/user.jar")))
+        assertEquals("keep-old", Files.readString(minecraft.resolve("resourcepacks/old.zip")))
+        assertEquals("keep-current", Files.readString(minecraft.resolve("resourcepacks/current.zip")))
+        assertEquals("keep-servers", Files.readString(minecraft.resolve("servers.dat")))
         assertTrue(Files.exists(minecraft))
+    }
+
+    private fun expectedGameDir(minecraft: Path): Path {
+        return minecraft.toAbsolutePath().normalize().resolve("robotmc")
     }
 
     private fun properties(minecraft: Path, mods: List<String>, packs: List<String>): InstallerProperties {

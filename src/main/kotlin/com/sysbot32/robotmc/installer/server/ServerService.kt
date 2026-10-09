@@ -2,10 +2,12 @@ package com.sysbot32.robotmc.installer.server
 
 import com.sysbot32.robotmc.installer.InstallService
 import com.sysbot32.robotmc.installer.config.InstallerProperties
+import com.sysbot32.robotmc.installer.config.gameDirectory
 import com.sysbot32.robotmc.installer.progress.ProgressService
 import dev.dewy.nbt.Nbt
 import io.github.oshai.kotlinlogging.KotlinLogging
 import org.springframework.stereotype.Service
+import java.nio.file.Files
 import java.nio.file.Path
 import kotlin.io.path.exists
 
@@ -16,7 +18,11 @@ class ServerService(
     private val installerProperties: InstallerProperties,
     private val progressService: ProgressService,
 ) : InstallService {
-    fun getServers(path: Path = installerProperties.minecraft.directory.resolve("servers.dat")): ServersDat {
+    private fun serversDatPath(): Path {
+        return gameDirectory(installerProperties.minecraft.directory).resolve("servers.dat")
+    }
+
+    fun getServers(path: Path = serversDatPath()): ServersDat {
         if (!path.exists()) {
             return ServersDat(
                 servers = listOf(),
@@ -26,9 +32,10 @@ class ServerService(
     }
 
     fun addServer(
-        path: Path = installerProperties.minecraft.directory.resolve("servers.dat"),
+        path: Path = serversDatPath(),
         server: ServersDat.Server,
     ) {
+        path.parent?.let { Files.createDirectories(it) }
         Nbt().toFile(this.getServers(path).run {
             if (servers.none { it.ip == server.ip }) copy(servers = servers + listOf(server)) else this
         }.toNbt(), path.toFile())

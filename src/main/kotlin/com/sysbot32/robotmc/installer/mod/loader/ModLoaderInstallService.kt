@@ -96,6 +96,8 @@ class ModLoaderInstallService(
         if (decision.runInstaller) {
             executeModLoaderCommand(decision.arguments)
         }
+        // 설치 여부와 상관없이, 방금 쓰였거나 이미 있는 프로필의 이름과 gameDir 을 맞춘다.
+        this.launcherService.applyRobotMcProfile(decision.profileVersionId)
         this.progressService.step()
     }
 

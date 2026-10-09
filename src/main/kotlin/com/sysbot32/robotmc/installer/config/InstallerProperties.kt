@@ -74,6 +74,14 @@ data class InstallerProperties(
 }
 
 /**
+ * 모드, 리소스 팩, 세이브, servers.dat 를 두는 게임 폴더.
+ * 버전과 프로필 목록이 있는 [minecraftDirectory] 와 다르고, 그 경로만으로 정해진다.
+ */
+fun gameDirectory(minecraftDirectory: Path): Path {
+    return minecraftDirectory.toAbsolutePath().normalize().resolve("robotmc")
+}
+
+/**
  * version, url, sha256 이 모두 있을 때만 설치기 교체 후보로 본다.
  */
 fun InstallerProperties.pendingAppUpdate(): InstallerProperties.Update.App? {

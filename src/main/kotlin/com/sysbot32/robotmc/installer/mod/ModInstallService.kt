@@ -5,13 +5,13 @@ import com.sysbot32.robotmc.installer.config.InstalledRecord
 import com.sysbot32.robotmc.installer.config.InstallerProperties
 import com.sysbot32.robotmc.installer.config.configFileName
 import com.sysbot32.robotmc.installer.config.deleteInstalledFile
+import com.sysbot32.robotmc.installer.config.gameDirectory
 import com.sysbot32.robotmc.installer.config.uninstallFileNames
 import com.sysbot32.robotmc.installer.progress.ProgressService
 import io.github.oshai.kotlinlogging.KotlinLogging
 import org.springframework.stereotype.Service
 import org.springframework.web.client.RestClient
 import java.nio.file.Files
-import kotlin.io.path.createDirectory
 import kotlin.io.path.name
 
 private val log = KotlinLogging.logger { }
@@ -26,15 +26,12 @@ class ModInstallService(
         get() = 20
 
     override fun install() {
-        val modsDir = installerProperties.minecraft.directory.resolve("mods").also { log.info { it } }
+        val gameDir = gameDirectory(installerProperties.minecraft.directory)
+        val modsDir = gameDir.resolve("mods").also { log.info { it } }
         this.progressService.setStatus("모드 폴더 준비 중...")
-        if (!Files.exists(modsDir)) {
-            modsDir.createDirectory()
-        }
-        val modsOld = installerProperties.minecraft.directory.resolve("mods_old").also { log.info { it } }
-        if (!Files.exists(modsOld)) {
-            modsOld.createDirectory()
-        }
+        Files.createDirectories(modsDir)
+        val modsOld = gameDir.resolve("mods_old").also { log.info { it } }
+        Files.createDirectories(modsOld)
         modsDir.toFile().listFiles()?.forEach { log.info { it } }
         modsDir.toFile().listFiles()?.forEach {
             val newPath = modsOld.resolve(it.name)
@@ -65,11 +62,12 @@ class ModInstallService(
     }
 
     override fun uninstall() {
-        val modsDir = installerProperties.minecraft.directory.resolve("mods").also { log.info { it } }
+        val gameDir = gameDirectory(installerProperties.minecraft.directory)
+        val modsDir = gameDir.resolve("mods").also { log.info { it } }
         val configured = (installerProperties.mod?.mods ?: listOf()).map { configFileName(it.downloadUrl) }
         val names = uninstallFileNames(
             configured,
-            InstalledRecord.read(installerProperties.minecraft.directory),
+            InstalledRecord.read(gameDir),
             "mods",
         )
         for (fileName in names) {

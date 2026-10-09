@@ -89,6 +89,45 @@ class ModLoaderInstallDecisionTest {
     }
 
     @Test
+    fun loaderArgumentsUseTheMinecraftDirectoryNotTheGameDirectory() {
+        val minecraft = Files.createTempDirectory("mod-loader-minecraft")
+        val gameDir = minecraft.toAbsolutePath().normalize().resolve("robotmc")
+        val neoForge = decideModLoaderInstall(
+            type = ModLoaderType.NEO_FORGE,
+            loaderVersion = "21.11.6-beta",
+            minecraftVersion = "1.21.11",
+            minecraftDirectory = minecraft,
+            installOptions = listOf("--install-client"),
+            profiles = LauncherProfilesJson(
+                profiles = mapOf("NeoForge" to renamedProfile("neoforge-21.11.6-beta", gameDir)),
+            ),
+            installerDirectory = installerDirectory,
+        )
+        assertFalse(neoForge.runInstaller)
+        assertEquals("neoforge-21.11.6-beta", neoForge.profileVersionId)
+        assertEquals(minecraft.toString(), neoForge.arguments[neoForge.arguments.indexOf("--install-client") + 1])
+        assertFalse(neoForge.arguments.contains(gameDir.toString()))
+
+        val fabric = decideModLoaderInstall(
+            type = ModLoaderType.FABRIC,
+            loaderVersion = "0.16.14",
+            minecraftVersion = "1.21.11",
+            minecraftDirectory = minecraft,
+            installOptions = emptyList(),
+            profiles = LauncherProfilesJson(
+                profiles = mapOf(
+                    "fabric-loader-1.21.11" to renamedProfile("fabric-loader-0.16.14-1.21.11", gameDir),
+                ),
+            ),
+            installerDirectory = installerDirectory,
+        )
+        assertFalse(fabric.runInstaller)
+        assertEquals("fabric-loader-0.16.14-1.21.11", fabric.profileVersionId)
+        assertEquals(minecraft.toString(), fabric.arguments[fabric.arguments.indexOf("-dir") + 1])
+        assertFalse(fabric.arguments.contains(gameDir.toString()))
+    }
+
+    @Test
     fun neoForgeClientDirectoryIsAlwaysTheConfiguredDirectory() {
         assertEquals(
             listOf(
@@ -221,6 +260,23 @@ class ModLoaderInstallDecisionTest {
             installOptions = installOptions,
             profiles = profiles,
             installerDirectory = installerDirectory,
+        )
+    }
+
+    private fun renamedProfile(lastVersionId: String, gameDir: Path): LauncherProfilesJson.Profile {
+        return LauncherProfilesJson.Profile(
+            name = "RobotMC",
+            type = "custom",
+            created = null,
+            lastUsed = null,
+            icon = "icon",
+            lastVersionId = lastVersionId,
+            gameDir = gameDir.toString(),
+            javaDir = null,
+            javaArgs = "-Xmx4G",
+            logConfig = null,
+            logConfigIsXml = null,
+            resolution = null,
         )
     }
 
