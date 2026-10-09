@@ -5,6 +5,7 @@ import com.sysbot32.robotmc.installer.config.InstallerProperties
 import com.sysbot32.robotmc.installer.config.RemoteInstallerConfig
 import com.sysbot32.robotmc.installer.gui.InstallerSession
 import com.sysbot32.robotmc.installer.gui.InstallerWindow
+import com.sysbot32.robotmc.installer.prelaunch.LAUNCHER_RESTART_DETAIL
 import com.sysbot32.robotmc.installer.progress.ProgressService
 import com.sysbot32.robotmc.installer.progress.plannedSteps
 import io.github.oshai.kotlinlogging.KotlinLogging
@@ -54,6 +55,7 @@ fun main(args: Array<String>) {
             }
             log.info { "========== End ==========" }
         },
+        notice = if (properties.launcherRestart) LAUNCHER_RESTART_DETAIL else null,
     )
     var exitCode = 0
     application(exitProcessOnExit = false) {

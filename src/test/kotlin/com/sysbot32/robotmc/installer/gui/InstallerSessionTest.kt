@@ -1,6 +1,7 @@
 package com.sysbot32.robotmc.installer.gui
 
 import com.sysbot32.robotmc.installer.config.InstallerProperties.Mode
+import com.sysbot32.robotmc.installer.prelaunch.LAUNCHER_RESTART_DETAIL
 import com.sysbot32.robotmc.installer.exception.UserException
 import com.sysbot32.robotmc.installer.progress.ProgressService
 import java.util.concurrent.CyclicBarrier
@@ -160,6 +161,16 @@ class InstallerSessionTest {
     }
 
     @Test
+    fun relaunchWithoutRestartingTheLauncherShowsOnlyTheNotice() {
+        val session = openSession(notice = LAUNCHER_RESTART_DETAIL)
+
+        assertEquals(SessionPhase.Finished, session.state.value.phase)
+        assertTrue(session.state.value.notice)
+        assertEquals(LAUNCHER_RESTART_DETAIL, session.state.value.message)
+        assertEquals(0, session.state.value.exitCode)
+    }
+
+    @Test
     fun userExceptionFinishesWithItsMessageAndExitStatus() {
         var afterThrowCount = 0
         val failure = object : UserException("런처가 없어요") {
@@ -231,6 +242,7 @@ class InstallerSessionTest {
     private fun openSession(
         mode: Mode = Mode.INSTALL,
         totalSteps: Int = 4,
+        notice: String? = null,
         work: (ProgressService) -> Unit = { _ -> },
     ): InstallerSession {
         val progress = ProgressService()
@@ -239,6 +251,7 @@ class InstallerSessionTest {
             totalSteps = totalSteps,
             progress = progress,
             work = { work(progress) },
+            notice = notice,
         )
     }
 }

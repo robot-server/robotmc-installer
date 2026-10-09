@@ -51,6 +51,11 @@ data class InstallerProperties(
     val gameDirectoryName: String = DEFAULT_GAME_DIRECTORY_NAME,
     /** 런처 프로필 아이콘. application.yml 의 profile-icon. 내장 텍스처 이름. */
     val profileIcon: String = DEFAULT_PROFILE_ICON,
+    /**
+     * 디스크의 로더는 맞는데, 켜져 있는 런처가 예전 로더로 게임을 다시 띄운 경우.
+     * 설치는 하지 않고 런처를 껐다 켜 달라는 안내만 연다.
+     */
+    val launcherRestart: Boolean = false,
 ) {
     enum class Mode {
         INSTALL,

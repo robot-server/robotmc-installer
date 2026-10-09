@@ -401,6 +401,71 @@ class PrelaunchCheckTest {
     }
 
     @Test
+    fun staleLauncherLoaderAsksToRestartInsteadOfInstallingAgain() {
+        val classes = Files.createTempDirectory("robotmc-stale")
+        compileStandIns(classes)
+        val minecraft = Files.createTempDirectory("robotmc-stale-mc").resolve("My Minecraft")
+        Files.createDirectories(minecraft)
+        val gameDir = gameDirectory(minecraft)
+        val jars = listOf("iris.jar", "sodium.jar")
+        val yaml = applicationYaml("neo_forge", "21.11.6-beta", "1.21.11", jars)
+        Files.writeString(minecraft.resolve("launcher_profiles.json"), profiles(gameDir, "RobotMC", null))
+        val marker = minecraft.resolve("installer-ran.txt")
+        val command = listOf(
+            installerJavaExecutable(),
+            "-cp",
+            classes.toString(),
+            "InstallerMarker",
+            marker.toString(),
+        )
+        val service = LauncherService(
+            InstallerProperties(
+                minecraft = InstallerProperties.Minecraft(version = "1.21.11", directory = minecraft),
+                mod = InstallerProperties.Mod(
+                    loader = InstallerProperties.Mod.Loader(ModLoaderType.NEO_FORGE, "21.11.6-beta"),
+                ),
+            ),
+            Jackson2ObjectMapperBuilder.json().build(),
+        )
+        service.applyRobotMcProfile(
+            path = minecraft.resolve("launcher_profiles.json"),
+            prelaunchHome = minecraft.resolve("My Agent"),
+            installerCommand = command,
+            manifestUrl = "",
+            cacheFile = minecraft.resolve("no-cache.yml"),
+            bundledYaml = yaml,
+        )
+        writeAlias(minecraft, "RobotMC", "neoforge-21.11.6-beta")
+        writeJars(gameDir.resolve("mods"), jars)
+        val javaArgs = ObjectMapper().readTree(Files.readString(minecraft.resolve("launcher_profiles.json")))
+            .get("profiles").get("robotmc").get("javaArgs").asText()
+
+        val stale = runGame(
+            javaArgs,
+            gameDir,
+            classes,
+            marker,
+            programArgs = listOf("--fml.neoForgeVersion", "21.5.75"),
+        )
+        assertEquals(0, stale.exit)
+        assertFalse(stale.stdout.contains("SENTINEL_MAIN_RAN"))
+        assertTrue(stale.marker)
+        assertEquals("ran\n$LAUNCHER_RESTART_ARGUMENT", Files.readString(marker))
+
+        Files.delete(marker)
+        val current = runGame(
+            javaArgs,
+            gameDir,
+            classes,
+            marker,
+            programArgs = listOf("--fml.neoForgeVersion", "21.11.6-beta"),
+        )
+        assertEquals(0, current.exit)
+        assertTrue(current.stdout.contains("SENTINEL_MAIN_RAN"))
+        assertFalse(current.marker)
+    }
+
+    @Test
     fun agentReturnsOnMatchAndExitsAfterTheInstallerOnMismatch() {
         val classes = Files.createTempDirectory("robotmc-sentinel")
         compileStandIns(classes)
@@ -521,10 +586,17 @@ class PrelaunchCheckTest {
         )
     }
 
-    private fun runGame(javaArgs: String, cwd: Path, sentinelCp: Path, marker: Path): GameRun {
+    private fun runGame(
+        javaArgs: String,
+        cwd: Path,
+        sentinelCp: Path,
+        marker: Path,
+        programArgs: List<String> = emptyList(),
+    ): GameRun {
         val command = mutableListOf(installerJavaExecutable())
         command += tokenizeJavaArgs(javaArgs)
         command += listOf("-cp", sentinelCp.toString(), "SentinelMain")
+        command += programArgs
         assertTrue(command.any { isJavaAgentToken(it) })
         val out = Files.createTempFile("robotmc-out", ".txt")
         val err = Files.createTempFile("robotmc-err", ".txt")
@@ -589,7 +661,11 @@ class PrelaunchCheckTest {
             import java.nio.file.Path;
             public class InstallerMarker {
                 public static void main(String[] args) throws Exception {
-                    Files.writeString(Path.of(args[0]), "ran");
+                    StringBuilder text = new StringBuilder("ran");
+                    for (int i = 1; i < args.length; i++) {
+                        text.append('\n').append(args[i]);
+                    }
+                    Files.writeString(Path.of(args[0]), text.toString());
                 }
             }
             """.trimIndent() + "\n",

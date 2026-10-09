@@ -33,21 +33,31 @@ class PrelaunchAgent private constructor() {
                 Runtime.getRuntime().halt(EXIT_OPTIONS_UNREADABLE)
                 return
             }
-            val checkFailed = try {
+            val check = try {
                 val yaml = loadRemoteConfig(options.manifestUrl, options.cacheFile, options.bundledFile)
-                if (checkLaunchConfig(options.minecraftDirectory, options.profileKey, yaml).match) {
-                    return
-                }
-                false
+                checkLaunchConfig(options.minecraftDirectory, options.profileKey, yaml)
             } catch (exception: Exception) {
                 System.err.println("실행 전 검사를 끝내지 못해서 설치기를 실행해요.")
-                true
+                null
             }
-            if (!checkFailed) {
-                System.err.println("로더 또는 모드가 원격 구성과 달라서 설치기를 실행해요.")
+            // 디스크 구성은 맞는데 런처가 예전 로더로 JVM 을 띄운 경우. 설치는 다시 하지 않는다.
+            val restartLauncher = check != null &&
+                check.match &&
+                loaderLaunchDiffers(currentRunningLoaderIds(), check.launchedLoaderId)
+            if (check != null && check.match && !restartLauncher) {
+                return
+            }
+            val command = if (restartLauncher) {
+                System.err.println(LAUNCHER_RESTART_DETAIL)
+                options.installerCommand + LAUNCHER_RESTART_ARGUMENT
+            } else {
+                if (check != null) {
+                    System.err.println("로더 또는 모드가 원격 구성과 달라서 설치기를 실행해요.")
+                }
+                options.installerCommand
             }
             val installerStarted = try {
-                val process = ProcessBuilder(options.installerCommand)
+                val process = ProcessBuilder(command)
                     .redirectOutput(ProcessBuilder.Redirect.DISCARD)
                     .redirectError(ProcessBuilder.Redirect.DISCARD)
                     .start()
@@ -60,10 +70,15 @@ class PrelaunchAgent private constructor() {
             System.err.flush()
             val exitCode = when {
                 installerStarted -> EXIT_INSTALLER_STARTED
-                checkFailed -> EXIT_CHECK_FAILED
+                check == null -> EXIT_CHECK_FAILED
                 else -> EXIT_INSTALLER_NOT_STARTED
             }
             Runtime.getRuntime().halt(exitCode)
+        }
+
+        private fun currentRunningLoaderIds(): List<String> {
+            val arguments = ProcessHandle.current().info().arguments().orElse(emptyArray()).toList()
+            return runningLoaderIds(System.getProperty("java.class.path"), arguments)
         }
     }
 }
