@@ -1,5 +1,6 @@
 import com.sysbot32.robotmc.installer.InstallerAppIcon
 import com.sysbot32.robotmc.installer.InstallerVersion
+import com.sysbot32.robotmc.installer.WindowsSfxPack
 import java.nio.file.Files
 import java.security.MessageDigest
 import java.util.jar.JarFile
@@ -190,6 +191,37 @@ tasks.register("packageInstallerAppImage") {
 }
 
 // test에 붙이지 않는다. 이미지를 만들면 단위 테스트가 느려진다.
+// Windows 러너에서만 의미 있다. jpackage는 호스트 OS 이미지만 만들고, 수정 SFX 모듈이 InstallPath를 유지한다.
+tasks.register("packageWindowsSfx") {
+    group = "distribution"
+    description = "Windows 앱 이미지를 7-Zip SFX exe 하나로 묶는다."
+    dependsOn("packageInstallerAppImage")
+    val config = WindowsSfxPack.configFile(project.projectDir)
+    val sfxModule = providers.gradleProperty("sfxModule")
+    inputs.file(config)
+    inputs.dir(installerAppImageDir)
+    inputs.property("version", providers.provider { project.version.toString() })
+    sfxModule.orNull?.let { inputs.file(File(it)) }
+    val output = layout.buildDirectory.file(
+        "${WindowsSfxPack.OUTPUT_DIR}/robotmc-installer-${project.version}.exe",
+    )
+    outputs.file(output)
+    doLast {
+        if (installerHostOs() != "windows") {
+            throw org.gradle.api.GradleException("packageWindowsSfx는 Windows에서만 앱 이미지를 묶는다.")
+        }
+        val modulePath = sfxModule.orNull
+            ?: throw org.gradle.api.GradleException("수정 SFX 모듈 경로가 없습니다. -PsfxModule 으로 넘깁니다.")
+        WindowsSfxPack.pack(
+            imageDir = installerImagePaths(installerAppImageDir.get().asFile).image,
+            configFile = config,
+            moduleFile = File(modulePath),
+            sevenZip = WindowsSfxPack.findSevenZip(),
+            destination = output.get().asFile,
+        )
+    }
+}
+
 tasks.register("checkInstallerAppImage") {
     group = "verification"
     description = "앱 이미지의 런처와 포함된 Java $installerJdkMajor java를 검사한다."
@@ -202,7 +234,11 @@ tasks.register("checkInstallerAppImage") {
     doLast {
         val testTask = tasks.named("test").get()
         val testDependsOnImage = testTask.taskDependencies.getDependencies(testTask)
-            .any { it.name == "packageInstallerAppImage" || it.name == "checkInstallerAppImage" }
+            .any {
+                it.name == "packageInstallerAppImage" ||
+                    it.name == "checkInstallerAppImage" ||
+                    it.name == "packageWindowsSfx"
+            }
         if (testDependsOnImage) {
             throw org.gradle.api.GradleException("test 태스크가 앱 이미지를 만들면 안 된다.")
         }

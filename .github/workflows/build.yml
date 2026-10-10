@@ -85,3 +85,68 @@ jobs:
               --title "$GITHUB_REF_NAME" \
               --notes "bootJar ${version}."
           fi
+
+  windows-sfx:
+    name: windows-sfx
+    needs: release
+    if: (github.event_name == 'push' || github.event_name == 'workflow_dispatch') && github.ref_type == 'tag'
+    runs-on: windows-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Set up JDK 25
+        uses: actions/setup-java@v6
+        with:
+          distribution: temurin
+          java-version: "25"
+
+      - name: Set up Gradle
+        uses: gradle/actions/setup-gradle@v6
+
+      - name: Require an exact release tag
+        shell: bash
+        run: |
+          set -euo pipefail
+          ref="${GITHUB_REF_NAME}"
+          if [[ ! "$ref" =~ ^v(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$ ]]; then
+            echo "A Windows SFX is uploaded only for an exact v<major>.<minor>.<patch> tag."
+            exit 1
+          fi
+
+      - name: Download the modified 7-Zip SFX module
+        shell: bash
+        run: |
+          set -euo pipefail
+          # 공식 7zSD.sfx는 임시 폴더에 풀고 지운다. 이 수정 모듈은 InstallPath를 남긴다.
+          # GNU LGPL 2.1 이상. 소스: https://github.com/OlegScherbakov/7zSFX
+          url="https://github.com/OlegScherbakov/7zSFX/raw/01ed0bf2003ae80cdc5e37e893053d151478c812/files/7zsd_extra_170_3900.7z"
+          curl -fsSL -o sfx-extra.7z "$url"
+          python -c 'import hashlib, pathlib, sys; expected="223ebd7b6146fc2ae6f2ffd7879aedff7901cab7dcfa859109790df17847797b"; actual=hashlib.sha256(pathlib.Path("sfx-extra.7z").read_bytes()).hexdigest(); sys.exit(0 if actual==expected else "modified SFX archive hash mismatch: %s" % actual)'
+          7z x -y -osfx-module sfx-extra.7z
+          test -f sfx-module/7zsd_All_x64.sfx
+
+      - name: Build the Windows app image and pack one 7-Zip SFX
+        shell: bash
+        run: ./gradlew packageInstallerAppImage packageWindowsSfx --console=plain -PreleaseRef="${GITHUB_REF_NAME}" -PsfxModule="sfx-module/7zsd_All_x64.sfx"
+
+      - name: Upload the exe to the GitHub Release
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          version="$(tr -d '[:space:]' < build/generated/installer-version/installer-version.txt)"
+          expected="${GITHUB_REF_NAME#v}"
+          if [[ "$version" != "$expected" ]]; then
+            echo "Gradle version '${version}' is not '${expected}'."
+            exit 1
+          fi
+          exe="build/windows-sfx/robotmc-installer-${version}.exe"
+          if [[ ! -f "$exe" ]]; then
+            echo "Missing ${exe}."
+            exit 1
+          fi
+          gh release upload "$GITHUB_REF_NAME" "$exe" --clobber
