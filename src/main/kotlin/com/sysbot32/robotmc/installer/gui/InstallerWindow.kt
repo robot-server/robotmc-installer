@@ -32,6 +32,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.painter.Painter
 import androidx.compose.ui.input.key.Key
 import androidx.compose.ui.input.key.KeyShortcut
+import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.DpSize
 import androidx.compose.ui.unit.dp
@@ -460,6 +461,7 @@ private fun ColumnScope.FinishedPhase(
     onClose: () -> Unit,
 ) {
     val failed = (state.exitCode ?: 0) != 0
+    val report = failureClipboardText(state)
     Column(modifier = modifier, verticalArrangement = Arrangement.spacedBy(16.dp)) {
         Text(
             when {
@@ -472,11 +474,28 @@ private fun ColumnScope.FinishedPhase(
             color = if (failed) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurface,
         )
         Text(state.message.orEmpty(), style = MaterialTheme.typography.bodyLarge)
-        Spacer(Modifier.weight(1f))
-        Button(
-            onClick = onClose,
+        if (report != null) {
+            Column(
+                modifier = Modifier.weight(1f).fillMaxWidth().verticalScroll(rememberScrollState()),
+            ) {
+                Text(
+                    report,
+                    style = MaterialTheme.typography.bodyMedium.copy(fontFamily = FontFamily.Monospace),
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+        } else {
+            Spacer(Modifier.weight(1f))
+        }
+        Row(
             modifier = Modifier.align(Alignment.End),
-        ) { Text("닫기") }
+            horizontalArrangement = Arrangement.spacedBy(12.dp),
+        ) {
+            if (report != null) {
+                OutlinedButton(onClick = { copyFailureReport(state) }) { Text("복사") }
+            }
+            Button(onClick = onClose) { Text("닫기") }
+        }
     }
 }
 
