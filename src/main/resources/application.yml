@@ -7,7 +7,8 @@ spring:
 installer:
   update:
     # https 면 시작 시 원격 YAML로 installer 구성을 바꾼다. 비어 있으면 이 파일을 쓴다.
-    # 원격 파일의 manifest-url 은 무시한다. update.app(version, url, sha256)은 설치기 교체용으로 읽어 두기만 한다.
+    # 원격 파일의 manifest-url 은 무시한다.
+    # update.app 은 version 과 windows, macos, linux 각각의 url, sha256 이다. 이 파일에는 그 값을 넣지 않는다.
     manifest-url: 'https://raw.githubusercontent.com/robot-server/robotmc-installer/refs/heads/main/src/main/resources/application.yml'
   # 런처에 보이는 이름, 프로필 키, 버전 id, 게임 폴더, 내장 아이콘. 비어 있으면 아래 기본값.
   profile-name: RobotMC

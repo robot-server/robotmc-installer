@@ -116,10 +116,12 @@ sourceSets.named("main") {
 }
 
 val prelaunchAgentJar = project(":prelaunch").layout.buildDirectory.file("agent/robotmc-prelaunch-agent.jar")
+val replaceJar = project(":replace").layout.buildDirectory.file("replace/installer-replace.jar")
 
 tasks.named<org.gradle.language.jvm.tasks.ProcessResources>("processResources") {
-    dependsOn(":prelaunch:agentJar")
+    dependsOn(":prelaunch:agentJar", ":replace:replaceJar")
     from(prelaunchAgentJar)
+    from(replaceJar)
 }
 
 tasks.withType<Test> {

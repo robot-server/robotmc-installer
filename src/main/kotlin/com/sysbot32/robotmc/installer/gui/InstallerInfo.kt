@@ -96,7 +96,7 @@ fun applicationVersion(resource: String = INSTALLER_VERSION_RESOURCE): String? {
 
 /**
  * 원격 설치기 버전이 내부 버전과 다를 때만 안내한다.
- * 후보가 아니거나 내부 버전이 비어 있으면 null 이다. JAR 는 받지 않는다.
+ * 이 OS 후보가 아니거나 내부 버전이 비어 있으면 null 이다.
  */
 fun installerUpdateNotice(
     properties: InstallerProperties,

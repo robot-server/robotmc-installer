@@ -132,7 +132,11 @@ class RemoteInstallerConfigTest {
             assertEquals(emptyList(), properties.resourcePacks)
             assertEquals(MAIN_MANIFEST, properties.update.manifestUrl)
             assertEquals("1.2.0", properties.pendingAppUpdate()?.version)
-            assertEquals("https://example.com/robotmc-installer.jar", properties.pendingAppUpdate()?.url)
+            assertEquals("https://example.com/robotmc-windows.jar", properties.update.app.windows.url)
+            assertEquals("https://example.com/robotmc-macos.jar", properties.update.app.macos.url)
+            assertEquals("https://example.com/robotmc-linux.jar", properties.update.app.linux.url)
+            assertNotEquals(properties.update.app.windows.url, properties.update.app.macos.url)
+            assertNotEquals(properties.update.app.macos.url, properties.update.app.linux.url)
             assertEquals("온라인", properties.settingsRows().first { it.label == "구성" }.value)
             assertEquals("none", context.environment.getProperty("spring.main.web-application-type"))
             assertNotEquals("off", context.environment.getProperty("spring.main.banner-mode"))
@@ -140,6 +144,7 @@ class RemoteInstallerConfigTest {
         val text = Files.readString(cache)
         assertFalse(text.contains("banner-mode"))
         assertFalse(text.contains("evil.example"))
+        assertFalse(text.contains("legacy.example"))
     }
 
     @Test
@@ -160,6 +165,7 @@ class RemoteInstallerConfigTest {
             assertEquals(listOf("https://example.com/pack-from-main.zip"), properties.resourcePacks.map { it.downloadUrl })
             assertEquals(MAIN_MANIFEST, properties.update.manifestUrl)
             assertNull(properties.pendingAppUpdate())
+            assertEquals(emptyList(), jarsUnder(directory))
             assertEquals("none", context.environment.getProperty("spring.main.web-application-type"))
         }
     }
@@ -177,17 +183,32 @@ class RemoteInstallerConfigTest {
               update:
                 app:
                   version: "1.2.0"
-                  url: http://example.com/robotmc-installer.jar
-                  sha256: abc
+                  url: https://legacy.example/old.jar
+                  sha256: $SHA
+                  windows:
+                    url: http://example.com/robotmc-installer.jar
+                    sha256: abc
+                  macos:
+                    url: http://example.com/robotmc-installer.jar
+                    sha256: abc
+                  linux:
+                    url: http://example.com/robotmc-installer.jar
+                    sha256: abc
             """.trimIndent()
         }.resolve()
         val properties = bindInstaller(Files.readString(resolved!!.location))
+        val text = Files.readString(resolved.location)
 
         assertEquals(listOf(URI(MAIN_MANIFEST)), seen)
         assertNull(properties.pendingAppUpdate())
-        assertEquals("", properties.update.app.url)
-        assertEquals("", properties.update.app.sha256)
+        assertEquals("", properties.update.app.windows.url)
+        assertEquals("", properties.update.app.windows.sha256)
+        assertEquals("", properties.update.app.macos.url)
+        assertEquals("", properties.update.app.macos.sha256)
+        assertEquals("", properties.update.app.linux.url)
+        assertEquals("", properties.update.app.linux.sha256)
         assertEquals("1.2.0", properties.update.app.version)
+        assertFalse(text.contains("legacy.example"))
         assertEquals(emptyList(), jarsUnder(directory))
     }
 
@@ -388,7 +409,10 @@ class RemoteInstallerConfigTest {
         assertNull(shortSha.pendingAppUpdate())
         assertNull(installerUpdateNotice(shortSha))
         assertEquals(remote, shortSha.update.app.version)
-        assertEquals("", shortSha.update.app.sha256)
+        assertEquals("", shortSha.update.app.windows.sha256)
+        assertEquals("", shortSha.update.app.macos.url)
+        assertEquals("", shortSha.update.app.macos.sha256)
+        assertEquals("", shortSha.update.app.linux.sha256)
         assertEquals(listOf(URI(MAIN_MANIFEST)), shortSeen)
 
         assertNull(installerUpdateNotice(different, internalVersion = null))
@@ -472,8 +496,15 @@ class RemoteInstallerConfigTest {
               update:
                 app:
                   version: "$version"
-                  url: $url
-                  sha256: $sha
+                  windows:
+                    url: $url
+                    sha256: $sha
+                  macos:
+                    url: $url
+                    sha256: $sha
+                  linux:
+                    url: $url
+                    sha256: $sha
             """.trimIndent()
         }.resolve()
         return bindInstaller(Files.readString(resolved!!.location))
@@ -549,8 +580,17 @@ installer:
     source: forged
     app:
       version: "1.2.0"
-      url: https://example.com/robotmc-installer.jar
+      url: https://legacy.example/old.jar
       sha256: $SHA
+      windows:
+        url: https://example.com/robotmc-windows.jar
+        sha256: $SHA
+      macos:
+        url: https://example.com/robotmc-macos.jar
+        sha256: $SHA
+      linux:
+        url: https://example.com/robotmc-linux.jar
+        sha256: $SHA
   profile-name: Remote Pack
   minecraft:
     version: "1.21.12"
