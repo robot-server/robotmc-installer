@@ -23,11 +23,12 @@ class WindowsSfxWorkflowTest {
         )
         @Suppress("UNCHECKED_CAST")
         val jobs = document.getValue("jobs") as Map<String, Map<String, Any?>>
-        assertEquals(setOf("test", "release", "windows-sfx"), jobs.keys)
+        assertEquals(setOf("test", "release", "release-windows"), jobs.keys)
 
         val testJob = jobs.getValue("test")
         val releaseJob = jobs.getValue("release")
-        val windowsJob = jobs.getValue("windows-sfx")
+        val windowsJob = jobs.getValue("release-windows")
+        assertEquals("release-windows", windowsJob["name"])
         assertEquals("ubuntu-latest", testJob["runs-on"])
         assertEquals("ubuntu-latest", releaseJob["runs-on"])
         assertEquals("windows-latest", windowsJob["runs-on"])
@@ -79,7 +80,7 @@ class WindowsSfxWorkflowTest {
 
         for ((name, job) in jobs) {
             assertFalse(job["runs-on"].toString().contains("macos"), name)
-            if (name == "windows-sfx") {
+            if (name == "release-windows") {
                 continue
             }
             val scripts = runScripts(job).joinToString("\n")

@@ -86,8 +86,8 @@ jobs:
               --notes "bootJar ${version}."
           fi
 
-  windows-sfx:
-    name: windows-sfx
+  release-windows:
+    name: release-windows
     needs: release
     if: (github.event_name == 'push' || github.event_name == 'workflow_dispatch') && github.ref_type == 'tag'
     runs-on: windows-latest
