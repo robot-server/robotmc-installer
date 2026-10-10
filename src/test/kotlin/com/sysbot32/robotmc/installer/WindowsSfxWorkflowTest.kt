@@ -55,6 +55,10 @@ class WindowsSfxWorkflowTest {
         assertFalse(jarUpload.contains("packageInstallerAppImage"))
         assertFalse(jarUpload.contains("packageWindowsSfx"))
 
+        assertEquals("jdk+jmods", setupJavaPackage(windowsJob))
+        assertEquals(null, setupJavaPackage(testJob))
+        assertEquals(null, setupJavaPackage(releaseJob))
+
         val windowsScripts = runScripts(windowsJob)
         assertTrue(windowsScripts.any { it.contains(exactTag) })
         assertEquals("bash", shellOfRunSteps(windowsJob).toSet().single())
@@ -93,6 +97,14 @@ private fun needs(job: Map<String, Any?>): Set<String> {
         is List<*> -> value.map { it.toString() }.toSet()
         else -> error("needs 가 없습니다: $value")
     }
+}
+
+@Suppress("UNCHECKED_CAST")
+private fun setupJavaPackage(job: Map<String, Any?>): String? {
+    val steps = job["steps"] as List<Map<String, Any?>>
+    val setup = steps.single { it["uses"]?.toString()?.startsWith("actions/setup-java@") == true }
+    val options = setup["with"] as Map<*, *>
+    return options["java-package"]?.toString()
 }
 
 @Suppress("UNCHECKED_CAST")

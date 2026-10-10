@@ -102,6 +102,8 @@ jobs:
         with:
           distribution: temurin
           java-version: "25"
+          # Temurin 25는 JEP 493으로 jmods를 빼서, ALL-MODULE-PATH jlink가 실패한다.
+          java-package: jdk+jmods
 
       - name: Set up Gradle
         uses: gradle/actions/setup-gradle@v6
