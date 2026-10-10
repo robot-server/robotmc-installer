@@ -10,6 +10,7 @@ import com.sysbot32.robotmc.installer.gui.installerWindowIconImage
 import com.sysbot32.robotmc.installer.gui.installerWindowIconPainter
 import java.awt.Graphics2D
 import java.awt.Taskbar
+import org.junit.jupiter.api.Assumptions.assumeTrue
 import org.junit.jupiter.api.Test
 import java.awt.image.BufferedImage
 import java.awt.image.MultiResolutionImage
@@ -72,13 +73,15 @@ class InstallerAppIconTest {
         var called = false
         installInstallerTaskbarIcon(supported = false) { called = true }
         assertTrue(!called)
+
+        called = false
+        installInstallerTaskbarIcon(supported = true, appImage = true) { called = true }
+        assertTrue(!called)
     }
 
     @Test
     fun taskbarKeepsTheWindowPictureWhenTheOsAllowsIt() {
-        if (!installerTaskbarIconSupported()) {
-            return
-        }
+        assumeTrue(installerTaskbarIconSupported())
         installInstallerTaskbarIcon()
         val icon = Taskbar.getTaskbar().iconImage ?: error("taskbar icon was not set")
         assertSamePixels(installerWindowIconImage(), raster(icon))

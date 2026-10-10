@@ -12,6 +12,7 @@ object InstallerAppIcon {
         val relative = when (os) {
             "mac" -> "src/main/icon/installer-app-icon.icns"
             "windows" -> "src/main/icon/installer-app-icon.ico"
+            // 창과 Dock이 클래스패스에서 읽는다. icns와 ico는 jpackage가 빌드 때 읽으므로 jar에 넣지 않는다.
             "linux" -> "src/main/resources/installer-app-icon.png"
             else -> throw IllegalArgumentException("지원하지 않는 OS입니다: $os")
         }

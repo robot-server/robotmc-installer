@@ -27,7 +27,7 @@ fun installerWindowIconPainter(): Painter = installerWindowIconImage().toPainter
 @Composable
 fun installerWindowIcon(): Painter = remember { installerWindowIconPainter() }
 
-/** macOS Dock 과 Windows 작업 표시줄은 이 기능을 제공한다. 없으면 창 아이콘만 쓴다. */
+/** macOS Dock만 ICON_IMAGE를 제공한다. Windows와 Linux는 창의 icon만 쓴다. */
 fun installerTaskbarIconSupported(): Boolean {
     if (GraphicsEnvironment.isHeadless()) {
         return false
@@ -41,13 +41,15 @@ fun installerTaskbarIconSupported(): Boolean {
 /**
  * 창의 icon 은 macOS Dock 을 바꾸지 않는다.
  * java -jar 는 앱 이미지가 없어서 Dock 이 Java 아이콘으로 남는다. 같은 그림을 여기 심는다.
+ * jpackage 앱 이미지는 `jpackage.app-path` 가 있고 번들 아이콘을 쓰므로 덮어쓰지 않는다.
  */
 fun installInstallerTaskbarIcon(
     image: BufferedImage = installerWindowIconImage(),
     supported: Boolean = installerTaskbarIconSupported(),
+    appImage: Boolean = System.getProperty("jpackage.app-path") != null,
     setIcon: (BufferedImage) -> Unit = ::setInstallerTaskbarIcon,
 ) {
-    if (!supported) {
+    if (appImage || !supported) {
         return
     }
     setIcon(image)
