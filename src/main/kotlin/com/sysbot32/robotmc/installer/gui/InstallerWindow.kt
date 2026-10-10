@@ -1,6 +1,7 @@
 package com.sysbot32.robotmc.installer.gui
 
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.Row
@@ -28,6 +29,7 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.painter.Painter
 import androidx.compose.ui.input.key.Key
@@ -47,6 +49,7 @@ import com.sysbot32.robotmc.installer.config.InstallerProperties
 import com.sysbot32.robotmc.installer.update.runInstallerUpdate
 import io.github.oshai.kotlinlogging.KotlinLogging
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import javax.swing.SwingUtilities
@@ -462,6 +465,16 @@ private fun ColumnScope.FinishedPhase(
 ) {
     val failed = (state.exitCode ?: 0) != 0
     val report = failureClipboardText(state)
+    var copied by remember { mutableStateOf(false) }
+    var copyAttempt by remember { mutableStateOf(0) }
+    LaunchedEffect(copyAttempt) {
+        if (copyAttempt == 0) {
+            return@LaunchedEffect
+        }
+        copied = true
+        delay(2_000)
+        copied = false
+    }
     Column(modifier = modifier, verticalArrangement = Arrangement.spacedBy(16.dp)) {
         Text(
             when {
@@ -492,7 +505,19 @@ private fun ColumnScope.FinishedPhase(
             horizontalArrangement = Arrangement.spacedBy(12.dp),
         ) {
             if (report != null) {
-                OutlinedButton(onClick = { copyFailureReport(state) }) { Text("복사") }
+                OutlinedButton(onClick = {
+                    if (copyFailureReport(state)) {
+                        copyAttempt += 1
+                    }
+                }) {
+                    // "복사"를 계속 놓아 두어 체크가 나와도 버튼 크기가 줄지 않게 한다.
+                    Box(contentAlignment = Alignment.Center) {
+                        Text("복사", modifier = Modifier.alpha(if (copied) 0f else 1f))
+                        if (copied) {
+                            Text("✓")
+                        }
+                    }
+                }
             }
             Button(onClick = onClose) { Text("닫기") }
         }

@@ -198,7 +198,7 @@ class InstallerSession(
 
     companion object {
         const val SUCCESS_MESSAGE = "완료됐어요."
-        const val GENERIC_FAILURE_MESSAGE = "오류가 발생했어요.\n로그 파일을 첨부해서 제보해 주세요."
+        const val GENERIC_FAILURE_MESSAGE = "오류가 발생했어요.\n로그를 첨부해서 제보해 주세요."
         const val GENERIC_FAILURE_EXIT = -1
 
         fun promptFor(mode: Mode): String = when (mode) {
@@ -306,9 +306,16 @@ fun failureClipboardText(state: SessionState): String? {
 fun copyFailureReport(
     state: SessionState,
     writeClipboard: (String) -> Unit = ::writeSystemClipboard,
-) {
-    val text = failureClipboardText(state) ?: return
-    writeClipboard(text)
+): Boolean {
+    val text = failureClipboardText(state) ?: return false
+    return try {
+        writeClipboard(text)
+        true
+    } catch (cancelled: CancellationException) {
+        throw cancelled
+    } catch (exception: Exception) {
+        false
+    }
 }
 
 internal fun writeSystemClipboard(text: String) {

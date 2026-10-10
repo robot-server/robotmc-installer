@@ -397,7 +397,8 @@ class InstallerSessionTest {
         val buttonAt = finished.indexOf("if (report != null)", finished.indexOf("if (report != null)") + 1)
         assertTrue(buttonAt > 0)
         val button = finished.substring(buttonAt).substringBefore("Button(onClick = onClose)")
-        assertTrue(button.contains("copyFailureReport(state)"))
+        assertTrue(button.contains("if (copyFailureReport(state))"))
+        assertTrue(button.contains("\"✓\""))
         assertTrue(button.contains("\"복사\""))
         assertEquals(1, Regex("copyFailureReport\\(").findAll(finished).count())
         val session = Files.readString(
@@ -467,7 +468,7 @@ class InstallerSessionTest {
             val state = session.state.value
             val expected = unexpectedFailureText(failure, full)
             assertEquals(SessionPhase.Finished, state.phase)
-            assertEquals("오류가 발생했어요.\n로그 파일을 첨부해서 제보해 주세요.", state.message)
+            assertEquals("오류가 발생했어요.\n로그를 첨부해서 제보해 주세요.", state.message)
             assertEquals(InstallerSession.GENERIC_FAILURE_MESSAGE, state.message)
             assertNotEquals(0, state.exitCode)
             assertEquals(InstallerSession.GENERIC_FAILURE_EXIT, state.exitCode)
@@ -481,9 +482,10 @@ class InstallerSessionTest {
             assertFalse(state.logTail.contains("HEAD_MARKER_NOT_ON_SCREEN"))
             assertFalse(detail.contains("HEAD_MARKER_NOT_ON_SCREEN"))
             val copied = mutableListOf<String>()
-            copyFailureReport(state) { copied += it }
+            assertTrue(copyFailureReport(state) { copied += it })
             assertEquals(listOf(expected), copied)
             assertEquals(expected, failureClipboardText(state))
+            assertFalse(copyFailureReport(state) { throw IllegalStateException("clipboard busy") })
         } finally {
             deleteTree(directory)
         }
@@ -494,7 +496,7 @@ class InstallerSessionTest {
         assertNull(state.failureDetail)
         assertNull(failureClipboardText(state))
         val copied = mutableListOf<String>()
-        copyFailureReport(state) { copied += it }
+        assertFalse(copyFailureReport(state) { copied += it })
         assertTrue(copied.isEmpty())
     }
 
