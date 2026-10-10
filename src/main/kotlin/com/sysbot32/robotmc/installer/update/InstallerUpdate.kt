@@ -143,7 +143,7 @@ private fun installerPartialPath(target: Path): Path {
 
 /**
  * 고른 주소만 받아 SHA-256 이 맞으면 설치기 옆에 스테이지한다.
- * 실행 중인 설치기 파일은 열어서 쓰지 않는다. 교체는 그 프로세스가 끝난 뒤 [InstallerReplace] 가 한다.
+ * 실행 중인 설치기 파일은 열어서 쓰지 않는다. 교체는 그 프로세스가 끝난 뒤 installer-replace.jar 가 한다.
  */
 internal fun prepareInstallerUpdate(
     app: InstallerProperties.Update.App,
@@ -321,9 +321,11 @@ internal fun defaultReplaceRoot(): Path {
  * 설치기에 들어 있는 교체 JAR을 [root]로 복사한다.
  * 이 프로세스는 그 JAR로 뜨고, 실행 중인 설치기 파일은 클래스패스로 쓰지 않는다.
  */
+private object ReplaceHelper
+
 internal fun replaceHelperJar(root: Path = defaultReplaceRoot()): Path {
     val destination = root.resolve(INSTALLER_REPLACE_JAR)
-    val stream = InstallerReplace::class.java.getResourceAsStream("/$INSTALLER_REPLACE_JAR")
+    val stream = ReplaceHelper::class.java.classLoader.getResourceAsStream(INSTALLER_REPLACE_JAR)
         ?: throw IllegalStateException("$INSTALLER_REPLACE_JAR is missing")
     Files.createDirectories(destination.parent)
     val partial = destination.resolveSibling("${destination.fileName}.partial")

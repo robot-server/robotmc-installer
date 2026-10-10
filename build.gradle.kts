@@ -81,13 +81,7 @@ compose.desktop {
     }
 }
 
-springBoot {
-    mainClass.set("com.sysbot32.robotmc.installer.RobotmcInstallerApplicationKt")
-}
-
 tasks.named<org.springframework.boot.gradle.tasks.bundling.BootJar>("bootJar") {
-    // 교체 진입점도 main 이 있다. 자동 탐지하면 그쪽으로 뜬다.
-    mainClass.set("com.sysbot32.robotmc.installer.RobotmcInstallerApplicationKt")
     // 이 두 모듈은 클래스가 없는 리다이렉트다. 파일 이름이 androidx의 실제 jar와 같아서
     // bootJar가 실패한다. duplicatesStrategy = EXCLUDE는 runtime-desktop에서 빈 jar가 앞에 있어
     // 클래스 있는 쪽을 버린다.
@@ -122,42 +116,10 @@ sourceSets.named("main") {
 }
 
 val prelaunchAgentJar = project(":prelaunch").layout.buildDirectory.file("agent/robotmc-prelaunch-agent.jar")
-
-// prelaunch 에이전트와 같이, 설치기 JAR 밖에서 뜨는 Kotlin 진입점이다.
-val replaceJar = tasks.register<Jar>("replaceJar") {
-    group = "build"
-    description = "설치기가 끝난 뒤에 파일을 바꾸는 JAR. 설치기 JAR을 클래스패스로 쓰지 않는다."
-    dependsOn(tasks.named("compileKotlin"))
-    archiveFileName.set("installer-replace.jar")
-    destinationDirectory.set(layout.buildDirectory.dir("replace"))
-    manifest {
-        attributes(
-            "Main-Class" to "com.sysbot32.robotmc.installer.update.InstallerReplace",
-        )
-    }
-    from(layout.buildDirectory.dir("classes/kotlin/main")) {
-        include("com/sysbot32/robotmc/installer/update/InstallerReplace*.class")
-    }
-    from({
-        configurations.runtimeClasspath.get()
-            .filter { file ->
-                val name = file.name
-                file.isFile &&
-                    file.extension == "jar" &&
-                    name.startsWith("kotlin-stdlib-") &&
-                    !name.contains("sources") &&
-                    !name.contains("javadoc")
-            }
-            .map { zipTree(it) }
-    }) {
-        exclude("META-INF/*.SF", "META-INF/*.DSA", "META-INF/*.RSA", "META-INF/MANIFEST.MF")
-        exclude("module-info.class")
-    }
-    duplicatesStrategy = org.gradle.api.file.DuplicatesStrategy.EXCLUDE
-}
+val replaceJar = project(":replace").layout.buildDirectory.file("replace/installer-replace.jar")
 
 tasks.named<org.gradle.language.jvm.tasks.ProcessResources>("processResources") {
-    dependsOn(":prelaunch:agentJar", replaceJar)
+    dependsOn(":prelaunch:agentJar", ":replace:replaceJar")
     from(prelaunchAgentJar)
     from(replaceJar)
 }

@@ -1,4 +1,4 @@
-package com.sysbot32.robotmc.installer.update
+package com.sysbot32.robotmc.installer.replace
 
 import java.io.IOException
 import java.nio.file.AtomicMoveNotSupportedException
@@ -9,7 +9,7 @@ import java.util.Locale
 
 /**
  * 설치기 프로세스가 끝난 뒤에 스테이지한 바이트를 설치기 파일로 옮기고 그 파일을 실행한다.
- * 설치기 JAR이 아니라 installer-replace.jar 로 띄운다. 실행 중인 설치기 파일을 잠그지 않는다.
+ * 이 모듈의 JAR로 띄운다. 실행 중인 설치기 파일은 클래스패스로 쓰지 않는다.
  */
 class InstallerReplace private constructor() {
     companion object {

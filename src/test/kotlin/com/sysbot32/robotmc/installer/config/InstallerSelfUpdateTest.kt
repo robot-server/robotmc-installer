@@ -108,10 +108,10 @@ class InstallerSelfUpdateTest {
         val helper = replaceHelperJar(root.resolve("helper"))
         JarFile(helper.toFile()).use { jar ->
             assertEquals(
-                "com.sysbot32.robotmc.installer.update.InstallerReplace",
+                "com.sysbot32.robotmc.installer.replace.InstallerReplace",
                 jar.manifest.mainAttributes.getValue(Attributes.Name.MAIN_CLASS),
             )
-            assertNotNull(jar.getJarEntry("com/sysbot32/robotmc/installer/update/InstallerReplace.class"))
+            assertNotNull(jar.getJarEntry("com/sysbot32/robotmc/installer/replace/InstallerReplace.class"))
         }
         val verified = markerJar()
         val old = byteArrayOf(1, 2, 3, 4)
