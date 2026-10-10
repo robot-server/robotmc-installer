@@ -314,6 +314,7 @@ fun copyFailureReport(
     } catch (cancelled: CancellationException) {
         throw cancelled
     } catch (exception: Exception) {
+        log.warn(exception) { "클립보드에 복사하지 못했어요." }
         false
     }
 }

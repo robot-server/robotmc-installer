@@ -7,10 +7,12 @@ import com.sysbot32.robotmc.installer.progress.ProgressService
 import java.nio.file.Files
 import java.nio.file.Path
 import java.nio.file.attribute.PosixFilePermission
+import java.util.concurrent.CancellationException
 import java.util.concurrent.CyclicBarrier
 import java.util.concurrent.atomic.AtomicInteger
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertFailsWith
 import kotlin.test.assertFalse
 import kotlin.test.assertNotEquals
 import kotlin.test.assertNull
@@ -397,8 +399,11 @@ class InstallerSessionTest {
         val buttonAt = finished.indexOf("if (report != null)", finished.indexOf("if (report != null)") + 1)
         assertTrue(buttonAt > 0)
         val button = finished.substring(buttonAt).substringBefore("Button(onClick = onClose)")
-        assertTrue(button.contains("if (copyFailureReport(state))"))
-        assertTrue(button.contains("\"✓\""))
+        val successBody = button.substringAfter("if (copyFailureReport(state)) {", "")
+        assertTrue(successBody.substringBefore("}").contains("copyAttempt += 1"))
+        val copiedBody = button.substringAfter("if (copied) {", "")
+        assertTrue(copiedBody.substringBefore("}").contains("\"✓\""))
+        assertFalse(button.substringBefore("if (copied) {").contains("\"✓\""))
         assertTrue(button.contains("\"복사\""))
         assertEquals(1, Regex("copyFailureReport\\(").findAll(finished).count())
         val session = Files.readString(
@@ -486,6 +491,9 @@ class InstallerSessionTest {
             assertEquals(listOf(expected), copied)
             assertEquals(expected, failureClipboardText(state))
             assertFalse(copyFailureReport(state) { throw IllegalStateException("clipboard busy") })
+            assertFailsWith<CancellationException> {
+                copyFailureReport(state) { throw CancellationException("stopped") }
+            }
         } finally {
             deleteTree(directory)
         }
