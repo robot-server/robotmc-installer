@@ -42,9 +42,12 @@ import androidx.compose.ui.window.WindowState
 import androidx.compose.ui.window.rememberDialogState
 import androidx.compose.ui.window.rememberWindowState
 import com.sysbot32.robotmc.installer.config.InstallerProperties
+import com.sysbot32.robotmc.installer.update.runInstallerUpdate
 import io.github.oshai.kotlinlogging.KotlinLogging
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
+import javax.swing.SwingUtilities
 import java.awt.Toolkit
 import java.awt.Window as AwtWindow
 
@@ -68,6 +71,56 @@ private enum class InfoPanel {
 }
 
 @Composable
+fun InstallerUpdateProgress(
+    properties: InstallerProperties,
+    onFinished: (Boolean) -> Unit,
+) {
+    var read by remember { mutableStateOf(0L) }
+    var total by remember { mutableStateOf<Long?>(null) }
+    val windowState = rememberWindowState(
+        position = WindowPosition(Alignment.Center),
+        width = 520.dp,
+        height = 220.dp,
+    )
+    LaunchedEffect(Unit) {
+        val success = withContext(Dispatchers.IO) {
+            runInstallerUpdate(properties) { done, size ->
+                SwingUtilities.invokeLater {
+                    read = done
+                    total = size
+                }
+            }
+        }
+        onFinished(success)
+    }
+    Window(
+        onCloseRequest = {},
+        title = "설치기 업데이트",
+        state = windowState,
+        resizable = false,
+    ) {
+        InstallerSurface {
+            Column(
+                modifier = Modifier.fillMaxSize().padding(28.dp),
+                verticalArrangement = Arrangement.spacedBy(16.dp),
+            ) {
+                Text("설치기 업데이트", style = MaterialTheme.typography.headlineMedium)
+                Text("새 버전을 받는 중이에요. 끝나면 새 창이 열려요.", style = MaterialTheme.typography.bodyLarge)
+                val known = total
+                if (known == null || known <= 0L) {
+                    LinearProgressIndicator(modifier = Modifier.fillMaxWidth())
+                } else {
+                    LinearProgressIndicator(
+                        progress = { (read.toFloat() / known.toFloat()).coerceIn(0f, 1f) },
+                        modifier = Modifier.fillMaxWidth(),
+                    )
+                }
+            }
+        }
+    }
+}
+
+@Composable
 fun InstallerWindow(
     session: InstallerSession,
     properties: InstallerProperties,
@@ -79,7 +132,6 @@ fun InstallerWindow(
     var menuReady by remember { mutableStateOf(false) }
     var showPlan by remember { mutableStateOf(false) }
     val updateNotice = installerUpdateNotice(properties)
-    var showUpdateAlert by remember { mutableStateOf(updateNotice != null) }
     val windowState = rememberWindowState(
         position = WindowPosition(Alignment.Center),
         width = 520.dp,
@@ -155,32 +207,6 @@ fun InstallerWindow(
         InfoPanel.About -> AboutDialog(properties, onClose = { panel = null })
         InfoPanel.Settings -> SettingsDialog(properties, state.mode, onClose = { panel = null })
         null -> Unit
-    }
-    if (showUpdateAlert && updateNotice != null) {
-        UpdateAlertDialog(updateNotice, onClose = { showUpdateAlert = false })
-    }
-}
-
-@Composable
-private fun UpdateAlertDialog(notice: String, onClose: () -> Unit) {
-    DialogWindow(
-        onCloseRequest = onClose,
-        title = "설치기 업데이트",
-        state = rememberDialogState(position = WindowPosition(Alignment.Center), width = 440.dp, height = 320.dp),
-        resizable = false,
-        alwaysOnTop = true,
-    ) {
-        InstallerSurface {
-            Column(
-                modifier = Modifier.fillMaxSize().padding(28.dp),
-                verticalArrangement = Arrangement.spacedBy(16.dp),
-            ) {
-                Text("설치기 업데이트", style = MaterialTheme.typography.headlineMedium)
-                Text(notice, style = MaterialTheme.typography.bodyLarge)
-                Spacer(Modifier.weight(1f))
-                Button(onClick = onClose, modifier = Modifier.align(Alignment.End)) { Text("확인") }
-            }
-        }
     }
 }
 

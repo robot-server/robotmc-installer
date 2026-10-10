@@ -151,6 +151,7 @@ internal fun prepareInstallerUpdate(
     osName: String,
     target: Path,
     fetch: (URI) -> InputStream,
+    onProgress: (read: Long, total: Long?) -> Unit = { _, _ -> },
 ): PreparedInstallerUpdate? {
     val selected = selectInstallerArtifact(app, packagedVersion, osName) ?: return null
     if (!Files.isRegularFile(target)) {
@@ -164,7 +165,7 @@ internal fun prepareInstallerUpdate(
     val actual = try {
         fetch(selected.uri).use { input ->
             Files.newOutputStream(partial).use { output ->
-                copyHashed(input, output, BODY_TIMEOUT)
+                copyHashed(input, output, BODY_TIMEOUT, onProgress)
             }
         }
     } catch (exception: Exception) {
@@ -203,30 +204,36 @@ internal fun armInstallerUpdate(
     return prepared
 }
 
-internal fun armRunningInstallerUpdate(properties: InstallerProperties) {
-    val target = runningInstallerJar()
-    if (target == null) {
-        val due = selectInstallerArtifact(
-            properties.update.app,
-            applicationVersion(),
-            System.getProperty("os.name", ""),
-        ) != null
-        if (due) {
-            log.info { "Installer update skipped because this process is not an installer jar" }
-        }
-        return
+internal fun installerUpdateDue(properties: InstallerProperties): Boolean {
+    if (runningInstallerJar() == null) {
+        return false
     }
-    val prepared = armInstallerUpdate(
+    return selectInstallerArtifact(
+        properties.update.app,
+        applicationVersion(),
+        System.getProperty("os.name", ""),
+    ) != null
+}
+
+/**
+ * 진행 화면이 뜬 뒤에 호출한다. 성공하면 교체 프로세스를 예약하고 true 를 반환한다.
+ */
+internal fun runInstallerUpdate(
+    properties: InstallerProperties,
+    onProgress: (read: Long, total: Long?) -> Unit,
+): Boolean {
+    val target = runningInstallerJar() ?: return false
+    val prepared = prepareInstallerUpdate(
         app = properties.update.app,
         packagedVersion = applicationVersion(),
         osName = System.getProperty("os.name", ""),
         target = target,
         fetch = ::openHttpsArtifact,
-        launch = { staged ->
-            spawnInstallerReplace(staged.target, staged.staged, ProcessHandle.current().pid())
-        },
-    ) ?: return
+        onProgress = onProgress,
+    ) ?: return false
+    spawnInstallerReplace(prepared.target, prepared.staged, ProcessHandle.current().pid())
     log.info { "Installer update ${properties.update.app.version} staged at ${prepared.staged}" }
+    return true
 }
 
 internal fun runningInstallerJar(
@@ -358,10 +365,16 @@ internal fun spawnInstallerReplace(target: Path, staged: Path, waitPid: Long) {
         .start()
 }
 
-private fun copyHashed(input: InputStream, output: java.io.OutputStream, timeout: Duration): String {
+private fun copyHashed(
+    input: InputStream,
+    output: java.io.OutputStream,
+    timeout: Duration,
+    onProgress: (read: Long, total: Long?) -> Unit,
+): String {
     val future = CompletableFuture.supplyAsync {
         val digest = MessageDigest.getInstance("SHA-256")
         val buffer = ByteArray(8192)
+        var readTotal = 0L
         while (true) {
             val read = input.read(buffer)
             if (read < 0) {
@@ -369,6 +382,8 @@ private fun copyHashed(input: InputStream, output: java.io.OutputStream, timeout
             }
             digest.update(buffer, 0, read)
             output.write(buffer, 0, read)
+            readTotal += read
+            onProgress(readTotal, null)
         }
         output.flush()
         digest.digest().joinToString("") { "%02x".format(it) }
