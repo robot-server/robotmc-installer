@@ -1,3 +1,4 @@
+import com.sysbot32.robotmc.installer.InstallerAppIcon
 import com.sysbot32.robotmc.installer.InstallerVersion
 import java.nio.file.Files
 import java.security.MessageDigest
@@ -170,7 +171,9 @@ tasks.register("packageInstallerAppImage") {
     group = "distribution"
     description = "현재 OS용 앱 이미지에 Java $installerJdkMajor 런타임과 bootJar를 넣는다."
     dependsOn(installerBootJar)
+    val appIcon = InstallerAppIcon.fileFor(installerHostOs(), project.rootDir)
     inputs.file(installerBootJar)
+    inputs.file(appIcon)
     inputs.property("version", providers.provider { project.version.toString() })
     inputs.property("jdk", installerJdk.map { it.metadata.installationPath.asFile.absolutePath })
     outputs.dir(installerAppImageDir)
@@ -181,6 +184,7 @@ tasks.register("packageInstallerAppImage") {
             destination = installerAppImageDir.get().asFile,
             work = installerAppImageWork.get().asFile,
             appVersion = project.version.toString(),
+            icon = appIcon,
         )
     }
 }
@@ -189,8 +193,10 @@ tasks.register("packageInstallerAppImage") {
 tasks.register("checkInstallerAppImage") {
     group = "verification"
     description = "앱 이미지의 런처와 포함된 Java $installerJdkMajor java를 검사한다."
+    val appIcon = InstallerAppIcon.fileFor(installerHostOs(), project.rootDir)
     dependsOn("packageInstallerAppImage")
     inputs.file(installerBootJar)
+    inputs.file(appIcon)
     inputs.dir(installerAppImageDir)
     inputs.property("jdk", installerJdk.map { it.metadata.installationPath.asFile.absolutePath })
     doLast {
@@ -204,11 +210,17 @@ tasks.register("checkInstallerAppImage") {
             imageDir = installerAppImageDir.get().asFile,
             bootJar = installerBootJar.get().asFile,
             jdkHome = installerJdk.get().metadata.installationPath.asFile,
+            iconFile = appIcon,
         )
         logger.lifecycle("launcher: ${result.launcher.canonicalPath}")
         logger.lifecycle("bundled java: ${result.javaExecutable.canonicalPath}")
         logger.lifecycle(result.versionOutput.trim())
         logger.lifecycle("major version: ${result.major}")
+        logger.lifecycle("app icon: ${result.appIcon.canonicalPath}")
+        if (installerHostOs() == "mac") {
+            logger.lifecycle("CFBundleIconFile: ${result.appIconName}")
+        }
+        logger.lifecycle("app icon bytes match the committed icon")
     }
 }
 
@@ -218,6 +230,7 @@ fun buildInstallerAppImage(
     destination: File,
     work: File,
     appVersion: String,
+    icon: File,
 ) {
     val mainClass = JarFile(bootJar).use { jar ->
         jar.manifest?.mainAttributes?.getValue("Main-Class")
@@ -266,6 +279,10 @@ fun buildInstallerAppImage(
     if (installerHostOs() == "mac") {
         command += listOf("--mac-package-identifier", "com.sysbot32.robotmc.installer")
     }
+    if (!icon.isFile) {
+        throw org.gradle.api.GradleException("앱 아이콘 파일이 없습니다: ${icon.absolutePath}")
+    }
+    command += listOf("--icon", icon.absolutePath)
     runCaptured(command)
 }
 
@@ -274,9 +291,11 @@ data class InstallerImageCheck(
     val javaExecutable: File,
     val versionOutput: String,
     val major: Int,
+    val appIcon: File,
+    val appIconName: String,
 )
 
-fun verifyInstallerAppImage(imageDir: File, bootJar: File, jdkHome: File): InstallerImageCheck {
+fun verifyInstallerAppImage(imageDir: File, bootJar: File, jdkHome: File, iconFile: File): InstallerImageCheck {
     val paths = installerImagePaths(imageDir)
     if (!paths.launcher.isFile) {
         throw org.gradle.api.GradleException("런처가 없습니다: ${paths.launcher.absolutePath}")
@@ -329,7 +348,79 @@ fun verifyInstallerAppImage(imageDir: File, bootJar: File, jdkHome: File): Insta
     if (probeJava != javaCanonical) {
         throw org.gradle.api.GradleException("java.home의 java가 이미지 런타임과 다릅니다: $probeJava")
     }
-    return InstallerImageCheck(paths.launcher, javaCanonical, versionOutput, major)
+    val installedIcon = verifyHostAppIcon(paths.image, iconFile)
+    return InstallerImageCheck(
+        paths.launcher,
+        javaCanonical,
+        versionOutput,
+        major,
+        installedIcon.file,
+        installedIcon.name,
+    )
+}
+
+data class InstalledAppIcon(
+    val file: File,
+    val name: String,
+)
+
+fun verifyHostAppIcon(image: File, iconFile: File): InstalledAppIcon {
+    if (!iconFile.isFile) {
+        throw org.gradle.api.GradleException("커밋된 앱 아이콘이 없습니다: ${iconFile.absolutePath}")
+    }
+    val installed = when (installerHostOs()) {
+        "mac" -> verifyMacAppIcon(image, iconFile)
+        "windows" -> verifyCopiedAppIcon(image, iconFile, "ico")
+        else -> verifyCopiedAppIcon(image, iconFile, "png")
+    }
+    if (!installed.file.canonicalFile.isInside(image.canonicalFile)) {
+        throw org.gradle.api.GradleException("앱 아이콘이 이미지 밖에 있습니다: ${installed.file.absolutePath}")
+    }
+    if (sha256(installed.file) != sha256(iconFile)) {
+        throw org.gradle.api.GradleException("앱 아이콘이 커밋된 파일과 다릅니다: ${installed.file.absolutePath}")
+    }
+    return installed
+}
+
+fun verifyMacAppIcon(app: File, iconFile: File): InstalledAppIcon {
+    val plist = File(app, "Contents/Info.plist")
+    if (!plist.isFile) {
+        throw org.gradle.api.GradleException("Info.plist가 없습니다: ${plist.absolutePath}")
+    }
+    val name = Regex("""<key>CFBundleIconFile</key>\s*<string>([^<]+)</string>""")
+        .find(plist.readText())
+        ?.groupValues
+        ?.get(1)
+        ?.trim()
+        .orEmpty()
+    if (name.isEmpty()) {
+        throw org.gradle.api.GradleException("CFBundleIconFile이 없습니다.")
+    }
+    val resources = File(app, "Contents/Resources")
+    val named = when {
+        File(resources, name).isFile -> File(resources, name)
+        !name.endsWith(".icns") && File(resources, "$name.icns").isFile -> File(resources, "$name.icns")
+        else -> File(resources, name)
+    }
+    if (!named.isFile || named.extension != "icns") {
+        throw org.gradle.api.GradleException("CFBundleIconFile이 가리키는 icns가 없습니다: $name")
+    }
+    if (sha256(named) != sha256(iconFile)) {
+        throw org.gradle.api.GradleException("앱 아이콘이 기본 Java 아이콘이거나 커밋된 icns와 다릅니다: ${named.absolutePath}")
+    }
+    return InstalledAppIcon(named, name)
+}
+
+fun verifyCopiedAppIcon(image: File, iconFile: File, extension: String): InstalledAppIcon {
+    val expected = sha256(iconFile)
+    val matches = image.walkTopDown()
+        .filter { it.isFile && it.extension.equals(extension, ignoreCase = true) && sha256(it) == expected }
+        .toList()
+    if (matches.isEmpty()) {
+        throw org.gradle.api.GradleException("이미지 안에 커밋된 앱 아이콘과 같은 $extension 파일이 없습니다.")
+    }
+    val chosen = matches.firstOrNull { it.name == iconFile.name } ?: matches.first()
+    return InstalledAppIcon(chosen, chosen.name)
 }
 
 data class InstallerImagePaths(

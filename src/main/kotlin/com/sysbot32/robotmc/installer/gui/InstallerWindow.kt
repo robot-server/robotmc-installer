@@ -29,6 +29,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.painter.Painter
 import androidx.compose.ui.input.key.Key
 import androidx.compose.ui.input.key.KeyShortcut
 import androidx.compose.ui.unit.Dp
@@ -100,11 +101,13 @@ fun InstallerUpdateProgress(
         }
         onFinished(success)
     }
+    val icon = installerWindowIcon()
     Window(
         onCloseRequest = {},
         title = "설치기 업데이트",
         state = windowState,
         resizable = false,
+        icon = icon,
     ) {
         InstallerSurface {
             Column(
@@ -145,6 +148,7 @@ fun InstallerWindow(
         height = if (updateNotice == null) 420.dp else 500.dp,
     )
     val detailsOpen = showPlan && state.phase == SessionPhase.Confirm
+    val icon = installerWindowIcon()
     Window(
         onCloseRequest = {
             when (session.state.value.phase) {
@@ -158,6 +162,7 @@ fun InstallerWindow(
         },
         title = windowTitle(state),
         state = windowState,
+        icon = icon,
     ) {
         LaunchedEffect(detailsOpen, updateNotice != null) {
             val height = windowHeight(detailsOpen, updateNotice != null, window)
@@ -211,18 +216,19 @@ fun InstallerWindow(
         )
     }
     when (panel) {
-        InfoPanel.About -> AboutDialog(properties, onClose = { panel = null })
-        InfoPanel.Settings -> SettingsDialog(properties, state.mode, onClose = { panel = null })
+        InfoPanel.About -> AboutDialog(properties, icon, onClose = { panel = null })
+        InfoPanel.Settings -> SettingsDialog(properties, state.mode, icon, onClose = { panel = null })
         null -> Unit
     }
 }
 
 @Composable
-private fun AboutDialog(properties: InstallerProperties, onClose: () -> Unit) {
+private fun AboutDialog(properties: InstallerProperties, icon: Painter, onClose: () -> Unit) {
     val notice = installerUpdateNotice(properties)
     DialogWindow(
         onCloseRequest = onClose,
         title = "정보",
+        icon = icon,
         state = rememberDialogState(width = 420.dp, height = if (notice == null) 280.dp else 360.dp),
     ) {
         InstallerSurface {
@@ -260,11 +266,13 @@ private fun AboutDialog(properties: InstallerProperties, onClose: () -> Unit) {
 private fun SettingsDialog(
     properties: InstallerProperties,
     mode: InstallerProperties.Mode,
+    icon: Painter,
     onClose: () -> Unit,
 ) {
     DialogWindow(
         onCloseRequest = onClose,
         title = "설정",
+        icon = icon,
         state = rememberDialogState(width = 520.dp, height = 460.dp),
     ) {
         InstallerSurface {
