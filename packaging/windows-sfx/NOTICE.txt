@@ -9,6 +9,6 @@ https://www.gnu.org/licenses/old-licenses/lgpl-2.1.html
 https://github.com/OlegScherbakov/7zSFX/raw/01ed0bf2003ae80cdc5e37e893053d151478c812/files/7zsd_extra_170_3900.7z
 
 모듈 소스:
-https://github.com/OlegScherbakov/7zSFX/raw/01ed0bf2003ae80cdc5e37e893053d151478c812/files/7zsd_src_170_3900.7z
+https://github.com/OlegScherbakov/7zSFX/raw/3606ffa5f4b3ab4bae02bef11f0467b4131b1ae8/files/7zsd_src_170_3900.7z
 
 이 바이너리는 저장소에 커밋하지 않습니다. packageWindowsSfx가 위 주소에서 받아 SHA-256을 확인한 뒤 exe 앞에 붙입니다.

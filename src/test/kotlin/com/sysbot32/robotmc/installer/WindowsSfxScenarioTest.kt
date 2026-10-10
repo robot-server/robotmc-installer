@@ -65,7 +65,7 @@ class WindowsSfxScenarioTest {
         assertTrue(notice.contains("GNU Lesser General Public License 2.1"))
         assertTrue(notice.contains("Igor Pavlov"))
         assertTrue(notice.contains("Oleg Scherbakov"))
-        assertTrue(notice.contains("7zsd_src_170_3900.7z"))
+        assertTrue(notice.contains("3606ffa5f4b3ab4bae02bef11f0467b4131b1ae8/files/7zsd_src_170_3900.7z"))
         assertTrue(notice.contains(WindowsSfxPack.MODULE_ARCHIVE_URL))
 
         val cache = Files.createTempDirectory("windows-sfx-module").toFile()
