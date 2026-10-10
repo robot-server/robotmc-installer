@@ -60,6 +60,8 @@ class InstallerSession(
     private val work: () -> Unit,
     notice: String? = null,
     private val applicationLog: Path = applicationLogFile(),
+    private val logHome: String = System.getProperty("user.home").orEmpty(),
+    private val logUserName: String = System.getProperty("user.name").orEmpty(),
 ) : ProgressSink {
     private val decided = AtomicBoolean(false)
     private val stateFlow = MutableStateFlow(
@@ -168,7 +170,12 @@ class InstallerSession(
                     phase = SessionPhase.Finished,
                     message = GENERIC_FAILURE_MESSAGE,
                     exitCode = GENERIC_FAILURE_EXIT,
-                    failureDetail = unexpectedFailureText(e, logText),
+                    failureDetail = unexpectedFailureText(
+                        e,
+                        logText,
+                        home = this.logHome,
+                        userName = this.logUserName,
+                    ),
                     logTail = logTail(logText),
                 )
             }
@@ -240,10 +247,39 @@ fun unexpectedFailureText(
     error: Throwable,
     logText: String?,
     maxChars: Int = APPLICATION_LOG_TAIL_CHARS,
+    home: String = "",
+    userName: String = "",
 ): String {
     val summary = exceptionSummary(error)
     val tail = logTail(logText, maxChars)
-    return if (tail.isEmpty()) summary else "$summary\n\n$tail"
+    val shown = if (tail.isEmpty()) summary else "$summary\n\n$tail"
+    return maskFailureReport(shown, home, userName)
+}
+
+/**
+ * 화면과 클립보드에 나가기 전에 홈 경로와 사용자 이름을 가린다.
+ * 사용자 이름이 두 글자 이하이면 로그의 다른 단어를 지우지 않도록 그대로 둔다.
+ */
+fun maskFailureReport(text: String, home: String, userName: String): String {
+    var masked = text
+    for (secret in homeVariants(home)) {
+        masked = masked.replace(secret, "~")
+    }
+    if (userName.length >= MIN_MASKED_USER_NAME_LENGTH) {
+        val pattern = Regex("(?<![0-9A-Za-z_])${Regex.escape(userName)}(?![0-9A-Za-z_])")
+        masked = pattern.replace(masked, "<user>")
+    }
+    return masked
+}
+
+private const val MIN_MASKED_USER_NAME_LENGTH = 3
+
+private fun homeVariants(home: String): List<String> {
+    if (home.length < 2 || home == "/" || home == "\\") {
+        return emptyList()
+    }
+    return listOf(home, home.replace('\\', '/'), home.replace('/', '\\')).distinct()
+        .sortedByDescending { it.length }
 }
 
 /**

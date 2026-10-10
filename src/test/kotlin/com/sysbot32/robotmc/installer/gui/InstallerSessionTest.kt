@@ -251,16 +251,18 @@ class InstallerSessionTest {
             if (supportsPosix(blocked)) {
                 Files.setPosixFilePermissions(blocked, emptySet())
                 try {
-                    val session = openSession(applicationLog = blocked) { _ -> throw failure }
-                    session.accept()
-                    val state = session.state.value
-                    val detail = state.failureDetail
-                    assertEquals(unexpectedFailureText(failure, null), detail)
-                    assertEquals("", state.logTail)
-                    assertTrue(detail != null)
-                    assertTrue(detail.contains("IllegalStateException"))
-                    assertFalse(detail.contains("SECRET_LOG_BODY"))
-                    assertEquals(InstallerSession.GENERIC_FAILURE_EXIT, state.exitCode)
+                    if (!Files.isReadable(blocked)) {
+                        val session = openSession(applicationLog = blocked) { _ -> throw failure }
+                        session.accept()
+                        val state = session.state.value
+                        val detail = state.failureDetail
+                        assertEquals(unexpectedFailureText(failure, null), detail)
+                        assertEquals("", state.logTail)
+                        assertTrue(detail != null)
+                        assertTrue(detail.contains("IllegalStateException"))
+                        assertFalse(detail.contains("SECRET_LOG_BODY"))
+                        assertEquals(InstallerSession.GENERIC_FAILURE_EXIT, state.exitCode)
+                    }
                 } finally {
                     Files.setPosixFilePermissions(
                         blocked,
@@ -269,6 +271,57 @@ class InstallerSessionTest {
                 }
             }
             assertNotEquals(applicationLogFile(), blocked)
+        } finally {
+            deleteTree(directory)
+        }
+    }
+
+    @Test
+    fun failureReportMasksHomeAndUserName() {
+        val home = "/Users/alice"
+        val userName = "alice"
+        val failure = IllegalStateException("failed at $home/mods")
+        val directory = Files.createTempDirectory("installer-session-mask")
+        try {
+            val logFile = directory.resolve("application.log")
+            val body = """
+                user.home=$home
+                user.name=$userName
+                windows=C:\Users\alice\AppData
+                kept=salice
+                short=al
+                TAIL_MARKER_ON_SCREEN
+            """.trimIndent()
+            Files.writeString(logFile, body)
+            val session = openSession(
+                applicationLog = logFile,
+                logHome = home,
+                logUserName = userName,
+            ) { _ -> throw failure }
+            session.accept()
+            val detail = session.state.value.failureDetail
+            val expected = unexpectedFailureText(
+                failure,
+                body,
+                home = home,
+                userName = userName,
+            )
+            assertEquals(expected, detail)
+            assertEquals(detail, failureClipboardText(session.state.value))
+            assertTrue(detail != null)
+            assertTrue(detail.contains("IllegalStateException: failed at ~/mods"))
+            assertTrue(detail.contains("user.home=~"))
+            assertTrue(detail.contains("user.name=<user>"))
+            assertTrue(detail.contains("windows=C:~\\AppData"))
+            assertTrue(detail.contains("kept=salice"))
+            assertTrue(detail.contains("short=al"))
+            assertTrue(detail.contains("TAIL_MARKER_ON_SCREEN"))
+            assertFalse(detail.contains(home))
+            assertFalse(detail.contains("C:\\Users\\alice"))
+            assertFalse(Regex("(?<![0-9A-Za-z_])alice(?![0-9A-Za-z_])").containsMatchIn(detail))
+            val copied = mutableListOf<String>()
+            copyFailureReport(session.state.value) { copied += it }
+            assertEquals(listOf(detail), copied)
         } finally {
             deleteTree(directory)
         }
@@ -386,6 +439,8 @@ class InstallerSessionTest {
         totalSteps: Int = 4,
         notice: String? = null,
         applicationLog: Path = Path.of("build", "installer-session-unused-application.log"),
+        logHome: String = "",
+        logUserName: String = "",
         work: (ProgressService) -> Unit = { _ -> },
     ): InstallerSession {
         val progress = ProgressService()
@@ -396,6 +451,8 @@ class InstallerSessionTest {
             work = { work(progress) },
             notice = notice,
             applicationLog = applicationLog,
+            logHome = logHome,
+            logUserName = logUserName,
         )
     }
 
