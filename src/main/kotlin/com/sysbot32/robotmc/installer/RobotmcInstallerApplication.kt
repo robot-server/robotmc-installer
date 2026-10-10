@@ -10,6 +10,7 @@ import androidx.compose.runtime.setValue
 import com.sysbot32.robotmc.installer.gui.InstallerSession
 import com.sysbot32.robotmc.installer.gui.InstallerUpdateProgress
 import com.sysbot32.robotmc.installer.gui.InstallerWindow
+import com.sysbot32.robotmc.installer.gui.installInstallerTaskbarIcon
 import com.sysbot32.robotmc.installer.prelaunch.LAUNCHER_RESTART_DETAIL
 import com.sysbot32.robotmc.installer.update.InstallerRelaunch
 import com.sysbot32.robotmc.installer.update.installerUpdateDue
@@ -42,6 +43,8 @@ fun main(args: Array<String>) {
     InstallerRelaunch.arguments = args.toList()
     System.setProperty("java.awt.headless", "false")
     System.setProperty("apple.awt.application.name", "RobotMC Installer")
+    runCatching { installInstallerTaskbarIcon() }
+        .onFailure { log.warn(it) { "Taskbar icon was not set" } }
     val resolved = runCatching { RemoteInstallerConfig.fromBundled().resolve() }
         .onFailure { log.warn(it) { "Remote config was not applied" } }
         .getOrNull()

@@ -4,8 +4,12 @@ import androidx.compose.ui.graphics.toAwtImage
 import androidx.compose.ui.unit.Density
 import androidx.compose.ui.unit.LayoutDirection
 import com.sysbot32.robotmc.installer.config.DEFAULT_PROFILE_ICON
+import com.sysbot32.robotmc.installer.gui.installInstallerTaskbarIcon
+import com.sysbot32.robotmc.installer.gui.installerTaskbarIconSupported
 import com.sysbot32.robotmc.installer.gui.installerWindowIconImage
 import com.sysbot32.robotmc.installer.gui.installerWindowIconPainter
+import java.awt.Graphics2D
+import java.awt.Taskbar
 import org.junit.jupiter.api.Test
 import java.awt.image.BufferedImage
 import java.awt.image.MultiResolutionImage
@@ -59,6 +63,28 @@ class InstallerAppIconTest {
     }
 
     @Test
+    fun taskbarIconIsTheWindowPicture() {
+        val seen = mutableListOf<BufferedImage>()
+        installInstallerTaskbarIcon(supported = true) { seen += it }
+        assertEquals(1, seen.size)
+        assertSamePixels(installerWindowIconImage(), seen.single())
+
+        var called = false
+        installInstallerTaskbarIcon(supported = false) { called = true }
+        assertTrue(!called)
+    }
+
+    @Test
+    fun taskbarKeepsTheWindowPictureWhenTheOsAllowsIt() {
+        if (!installerTaskbarIconSupported()) {
+            return
+        }
+        installInstallerTaskbarIcon()
+        val icon = Taskbar.getTaskbar().iconImage ?: error("taskbar icon was not set")
+        assertSamePixels(installerWindowIconImage(), raster(icon))
+    }
+
+    @Test
     fun fourWindowsPassThatIconAndTheProfileIconStaysRedstone() {
         val root = projectRoot()
         val window = File(root, "src/main/kotlin/com/sysbot32/robotmc/installer/gui/InstallerWindow.kt").readText()
@@ -75,6 +101,19 @@ class InstallerAppIconTest {
         assertEquals("Redstone_Block", DEFAULT_PROFILE_ICON)
         val profileTest = File(root, "src/test/kotlin/com/sysbot32/robotmc/installer/launcher/RobotMcProfileTest.kt").readText()
         assertTrue(!profileTest.contains("installer-app-icon"))
+    }
+
+    private fun raster(image: java.awt.Image): BufferedImage {
+        val width = image.getWidth(null)
+        val height = image.getHeight(null)
+        val raster = BufferedImage(width, height, BufferedImage.TYPE_INT_ARGB)
+        val graphics: Graphics2D = raster.createGraphics()
+        try {
+            graphics.drawImage(image, 0, 0, null)
+        } finally {
+            graphics.dispose()
+        }
+        return raster
     }
 
     private fun windowIconRaster(): BufferedImage {
