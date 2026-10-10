@@ -10,8 +10,8 @@ import java.io.File
 object InstallerAppIcon {
     fun fileFor(os: String, root: File): File {
         val relative = when (os) {
-            "mac" -> "src/main/installer-icon/installer-app-icon.icns"
-            "windows" -> "src/main/installer-icon/installer-app-icon.ico"
+            "mac" -> "src/main/icon/installer-app-icon.icns"
+            "windows" -> "src/main/icon/installer-app-icon.ico"
             "linux" -> "src/main/resources/installer-app-icon.png"
             else -> throw IllegalArgumentException("지원하지 않는 OS입니다: $os")
         }
