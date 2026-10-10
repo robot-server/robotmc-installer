@@ -1,7 +1,12 @@
 package com.sysbot32.robotmc.installer
 
 import java.io.File
+import java.net.URI
+import java.net.http.HttpClient
+import java.net.http.HttpRequest
+import java.net.http.HttpResponse
 import java.nio.charset.StandardCharsets
+import java.security.MessageDigest
 
 /**
  * Windows 릴리스가 묶는 7-Zip SFX.
@@ -15,14 +20,27 @@ import java.nio.charset.StandardCharsets
  */
 object WindowsSfxPack {
     const val CONFIG_RELATIVE_PATH = "packaging/windows-sfx/config.txt"
+    const val LICENSE_NOTICE_RELATIVE_PATH = "packaging/windows-sfx/NOTICE.txt"
     const val LAUNCHER_FILE_NAME = "RobotMC Installer.exe"
     const val RUNTIME_DIRECTORY = "runtime"
     const val OUTPUT_DIR = "windows-sfx"
+
+    /**
+     * 수정 모듈은 저장소에 넣지 않는다. GNU LGPL 2.1 이상이라 빌드할 때 이 커밋에서 받고,
+     * 고지 파일을 푼 폴더에 같이 넣는다.
+     */
+    const val MODULE_ARCHIVE_URL =
+        "https://github.com/OlegScherbakov/7zSFX/raw/01ed0bf2003ae80cdc5e37e893053d151478c812/files/7zsd_extra_170_3900.7z"
+    const val MODULE_ARCHIVE_SHA256 = "223ebd7b6146fc2ae6f2ffd7879aedff7901cab7dcfa859109790df17847797b"
+    const val MODULE_ARCHIVE_NAME = "7zsd_extra_170_3900.7z"
+    const val MODULE_ENTRY_NAME = "7zsd_All_x64.sfx"
 
     /** 수정 모듈 바이너리의 저작권 표기. 공식 7zSD.sfx에는 없다. */
     const val MODIFIED_MODULE_MARKER = "Scherbakov"
 
     fun configFile(projectDir: File): File = File(projectDir, CONFIG_RELATIVE_PATH)
+
+    fun licenseNoticeFile(projectDir: File): File = File(projectDir, LICENSE_NOTICE_RELATIVE_PATH)
 
     fun shippedConfigText(projectDir: File): String {
         val file = configFile(projectDir)
@@ -82,14 +100,71 @@ object WindowsSfxPack {
         return module + config + payload
     }
 
+    fun reusableModule(archive: File, extracted: File, expectedSha256: String): File? {
+        if (!archive.isFile || !extracted.isFile) {
+            return null
+        }
+        if (!sha256(archive).equals(expectedSha256, ignoreCase = true)) {
+            return null
+        }
+        return extracted
+    }
+
+    fun downloadModule(cacheDir: File, sevenZip: File): File {
+        if (!cacheDir.isDirectory && !cacheDir.mkdirs()) {
+            throw IllegalStateException("SFX 모듈 폴더를 만들지 못했습니다: ${cacheDir.absolutePath}")
+        }
+        val archive = File(cacheDir, MODULE_ARCHIVE_NAME)
+        val extracted = File(cacheDir, MODULE_ENTRY_NAME)
+        reusableModule(archive, extracted, MODULE_ARCHIVE_SHA256)?.let { cached ->
+            requireModifiedSfxModule(cached.readBytes())
+            return cached
+        }
+        if (archive.exists() && !archive.delete()) {
+            throw IllegalStateException("이전 SFX 모듈 아카이브를 지우지 못했습니다: ${archive.absolutePath}")
+        }
+        val client = HttpClient.newBuilder().followRedirects(HttpClient.Redirect.NORMAL).build()
+        val request = HttpRequest.newBuilder(URI.create(MODULE_ARCHIVE_URL)).GET().build()
+        val response = client.send(request, HttpResponse.BodyHandlers.ofFile(archive.toPath()))
+        if (response.statusCode() != 200) {
+            archive.delete()
+            throw IllegalStateException("SFX 모듈을 받지 못했습니다: HTTP ${response.statusCode()}")
+        }
+        val actual = sha256(archive)
+        if (!actual.equals(MODULE_ARCHIVE_SHA256, ignoreCase = true)) {
+            archive.delete()
+            throw IllegalStateException("SFX 모듈 해시가 다릅니다: $actual")
+        }
+        val extract = ProcessBuilder(
+            listOf(
+                sevenZip.absolutePath,
+                "x",
+                "-y",
+                "-o${cacheDir.absolutePath}${File.separator}",
+                archive.absolutePath,
+            ),
+        ).redirectErrorStream(true).start()
+        val extractOutput = extract.inputStream.bufferedReader(StandardCharsets.UTF_8).readText()
+        val extractCode = extract.waitFor()
+        if (extractCode != 0 || !extracted.isFile) {
+            throw IllegalStateException("SFX 모듈을 풀지 못했습니다 ($extractCode): $extractOutput")
+        }
+        requireModifiedSfxModule(extracted.readBytes())
+        return extracted
+    }
+
     fun pack(
         imageDir: File,
         configFile: File,
         moduleFile: File,
         sevenZip: File,
         destination: File,
+        licenseNotice: File,
     ) {
         val entries = sfxArchiveEntries(imageDir)
+        if (!licenseNotice.isFile) {
+            throw IllegalStateException("SFX 라이선스 고지가 없습니다: ${licenseNotice.absolutePath}")
+        }
         val module = moduleFile.readBytes()
         val config = configFile.readBytes()
         val work = File(destination.parentFile, "work")
@@ -128,6 +203,25 @@ object WindowsSfxPack {
             if (code != 0) {
                 throw IllegalStateException("7z가 실패했습니다 ($code): $output")
             }
+            val notice = ProcessBuilder(
+                listOf(
+                    sevenZip.absolutePath,
+                    "a",
+                    "-t7z",
+                    "-m0=LZMA2",
+                    "-mx=5",
+                    "-y",
+                    "-bso0",
+                    "-bsp0",
+                    payload.absolutePath,
+                    licenseNotice.name,
+                ),
+            ).directory(licenseNotice.parentFile).redirectErrorStream(true).start()
+            val noticeOutput = notice.inputStream.bufferedReader(StandardCharsets.UTF_8).readText()
+            val noticeCode = notice.waitFor()
+            if (noticeCode != 0) {
+                throw IllegalStateException("라이선스 고지를 7z에 넣지 못했습니다 ($noticeCode): $noticeOutput")
+            }
             if (!destination.parentFile.isDirectory && !destination.parentFile.mkdirs()) {
                 throw IllegalStateException("SFX 출력 폴더를 만들지 못했습니다: ${destination.parent}")
             }
@@ -152,7 +246,22 @@ object WindowsSfxPack {
             File("C:/Program Files (x86)/7-Zip/7z.exe"),
         )
         return standard.firstOrNull { it.isFile }
-            ?: throw IllegalStateException("7z.exe가 없습니다.")
+            ?: throw IllegalStateException("7z.exe가 없습니다. 7-Zip을 설치한 뒤 다시 실행합니다.")
+    }
+
+    fun sha256(file: File): String {
+        val digest = MessageDigest.getInstance("SHA-256")
+        file.inputStream().use { input ->
+            val buffer = ByteArray(1024 * 1024)
+            while (true) {
+                val read = input.read(buffer)
+                if (read < 0) {
+                    break
+                }
+                digest.update(buffer, 0, read)
+            }
+        }
+        return digest.digest().joinToString("") { "%02x".format(it) }
     }
 
     private fun indexOf(haystack: ByteArray, needle: ByteArray): Int {

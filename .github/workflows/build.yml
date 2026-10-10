@@ -116,21 +116,9 @@ jobs:
             exit 1
           fi
 
-      - name: Download the modified 7-Zip SFX module
-        shell: bash
-        run: |
-          set -euo pipefail
-          # 공식 7zSD.sfx는 임시 폴더에 풀고 지운다. 이 수정 모듈은 InstallPath를 남긴다.
-          # GNU LGPL 2.1 이상. 소스: https://github.com/OlegScherbakov/7zSFX
-          url="https://github.com/OlegScherbakov/7zSFX/raw/01ed0bf2003ae80cdc5e37e893053d151478c812/files/7zsd_extra_170_3900.7z"
-          curl -fsSL -o sfx-extra.7z "$url"
-          python -c 'import hashlib, pathlib, sys; expected="223ebd7b6146fc2ae6f2ffd7879aedff7901cab7dcfa859109790df17847797b"; actual=hashlib.sha256(pathlib.Path("sfx-extra.7z").read_bytes()).hexdigest(); sys.exit(0 if actual==expected else "modified SFX archive hash mismatch: %s" % actual)'
-          7z x -y -osfx-module sfx-extra.7z
-          test -f sfx-module/7zsd_All_x64.sfx
-
       - name: Build the Windows app image and pack one 7-Zip SFX
         shell: bash
-        run: ./gradlew packageInstallerAppImage packageWindowsSfx --console=plain -PreleaseRef="${GITHUB_REF_NAME}" -PsfxModule="sfx-module/7zsd_All_x64.sfx"
+        run: ./gradlew packageInstallerAppImage packageWindowsSfx --console=plain -PreleaseRef="${GITHUB_REF_NAME}"
 
       - name: Upload the exe to the GitHub Release
         shell: bash

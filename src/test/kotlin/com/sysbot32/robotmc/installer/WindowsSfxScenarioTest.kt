@@ -41,6 +41,8 @@ class WindowsSfxScenarioTest {
         val gradle = File(root, "build.gradle.kts").readText()
         assertTrue(gradle.contains("tasks.register(\"packageWindowsSfx\")"))
         assertTrue(gradle.contains("WindowsSfxPack.configFile("))
+        assertTrue(gradle.contains("WindowsSfxPack.downloadModule("))
+        assertTrue(gradle.contains("WindowsSfxPack.licenseNoticeFile("))
         assertTrue(gradle.contains("WindowsSfxPack.pack("))
         val packSource = File(
             root,
@@ -49,7 +51,35 @@ class WindowsSfxScenarioTest {
         val packBody = packSource.substringAfter("fun pack(").substringBefore("\n    fun findSevenZip")
         assertTrue(packBody.contains("sfxArchiveEntries(imageDir)"))
         assertTrue(packBody.contains("configFile.readBytes()"))
+        assertTrue(packBody.contains("licenseNotice.name"))
         assertTrue(packBody.contains("concatenate("))
+    }
+
+    @Test
+    fun moduleIsDownloadedFromThePinnedLgplSourceAndTheNoticeShipsWithIt() {
+        val root = repoRoot()
+        assertTrue(WindowsSfxPack.MODULE_ARCHIVE_URL.contains("OlegScherbakov/7zSFX/raw/01ed0bf2003ae80cdc5e37e893053d151478c812/files/7zsd_extra_170_3900.7z"))
+        assertEquals("223ebd7b6146fc2ae6f2ffd7879aedff7901cab7dcfa859109790df17847797b", WindowsSfxPack.MODULE_ARCHIVE_SHA256)
+        assertEquals("7zsd_All_x64.sfx", WindowsSfxPack.MODULE_ENTRY_NAME)
+        val notice = WindowsSfxPack.licenseNoticeFile(root).readText()
+        assertTrue(notice.contains("GNU Lesser General Public License 2.1"))
+        assertTrue(notice.contains("Igor Pavlov"))
+        assertTrue(notice.contains("Oleg Scherbakov"))
+        assertTrue(notice.contains("7zsd_src_170_3900.7z"))
+        assertTrue(notice.contains(WindowsSfxPack.MODULE_ARCHIVE_URL))
+
+        val cache = Files.createTempDirectory("windows-sfx-module").toFile()
+        try {
+            val archive = File(cache, "archive.7z")
+            val extracted = File(cache, "module.sfx")
+            archive.writeBytes(byteArrayOf(1, 2, 3, 4))
+            extracted.writeBytes(byteArrayOf(5, 6))
+            val hash = WindowsSfxPack.sha256(archive)
+            assertEquals(extracted, WindowsSfxPack.reusableModule(archive, extracted, hash))
+            assertEquals(null, WindowsSfxPack.reusableModule(archive, extracted, "0".repeat(64)))
+        } finally {
+            cache.deleteRecursively()
+        }
     }
 
     @Test

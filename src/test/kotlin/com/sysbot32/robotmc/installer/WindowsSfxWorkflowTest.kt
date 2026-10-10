@@ -58,18 +58,14 @@ class WindowsSfxWorkflowTest {
         val windowsScripts = runScripts(windowsJob)
         assertTrue(windowsScripts.any { it.contains(exactTag) })
         assertEquals("bash", shellOfRunSteps(windowsJob).toSet().single())
-        val download = windowsScripts.single { it.contains("OlegScherbakov/7zSFX") }
-        assertTrue(download.contains("7zsd_extra_170_3900.7z"))
-        assertTrue(download.contains("7zsd_All_x64.sfx"))
-        assertTrue(download.contains("223ebd7b6146fc2ae6f2ffd7879aedff7901cab7dcfa859109790df17847797b"))
-        assertTrue(Regex("""/raw/[0-9a-f]{40}/files/7zsd_extra_170_3900\.7z""").containsMatchIn(download))
-        assertFalse(download.contains("7-zip.org"))
         val pack = windowsScripts.single { it.contains("packageWindowsSfx") }
         assertTrue(pack.contains("packageInstallerAppImage"))
         assertTrue(pack.contains("-PreleaseRef="))
-        assertTrue(pack.contains("-PsfxModule="))
+        assertFalse(pack.contains("-PsfxModule="))
+        assertFalse(pack.contains("7-zip.org"))
         assertFalse(pack.contains("--type exe"))
         assertFalse(pack.contains("msi"))
+        assertFalse(windowsScripts.joinToString("\n").contains("7-zip.org"))
         val upload = windowsScripts.single { it.contains("gh release upload") }
         assertTrue(upload.contains("build/windows-sfx/robotmc-installer-"))
         assertTrue(upload.contains(".exe"))

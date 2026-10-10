@@ -197,8 +197,10 @@ tasks.register("packageWindowsSfx") {
     description = "Windows 앱 이미지를 7-Zip SFX exe 하나로 묶는다."
     dependsOn("packageInstallerAppImage")
     val config = WindowsSfxPack.configFile(project.projectDir)
+    val licenseNotice = WindowsSfxPack.licenseNoticeFile(project.projectDir)
     val sfxModule = providers.gradleProperty("sfxModule")
     inputs.file(config)
+    inputs.file(licenseNotice)
     inputs.dir(installerAppImageDir)
     inputs.property("version", providers.provider { project.version.toString() })
     sfxModule.orNull?.let { inputs.file(File(it)) }
@@ -210,14 +212,19 @@ tasks.register("packageWindowsSfx") {
         if (installerHostOs() != "windows") {
             throw org.gradle.api.GradleException("packageWindowsSfx는 Windows에서만 앱 이미지를 묶는다.")
         }
-        val modulePath = sfxModule.orNull
-            ?: throw org.gradle.api.GradleException("수정 SFX 모듈 경로가 없습니다. -PsfxModule 으로 넘깁니다.")
+        val sevenZip = WindowsSfxPack.findSevenZip()
+        val module = sfxModule.orNull?.let { File(it) }
+            ?: WindowsSfxPack.downloadModule(
+                layout.buildDirectory.dir("${WindowsSfxPack.OUTPUT_DIR}/module").get().asFile,
+                sevenZip,
+            )
         WindowsSfxPack.pack(
             imageDir = installerImagePaths(installerAppImageDir.get().asFile).image,
             configFile = config,
-            moduleFile = File(modulePath),
-            sevenZip = WindowsSfxPack.findSevenZip(),
+            moduleFile = module,
+            sevenZip = sevenZip,
             destination = output.get().asFile,
+            licenseNotice = licenseNotice,
         )
     }
 }
