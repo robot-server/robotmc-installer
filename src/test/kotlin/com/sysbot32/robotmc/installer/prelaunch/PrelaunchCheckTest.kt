@@ -245,12 +245,23 @@ class PrelaunchCheckTest {
         Files.createDirectories(windows.resolve("app"))
         Files.write(exe, byteArrayOf(4))
         Files.write(windows.resolve("app/robotmc-installer.jar"), byteArrayOf(5))
+        exe.toFile().setReadOnly()
         val storedWindows = stableInstallerCommand(listOf(exe.toString()), windowsHome)
         assertEquals(
             listOf(windowsHome.resolve("RobotMC Installer/$INSTALLER_APP_NAME.exe").toAbsolutePath().normalize().toString()),
             storedWindows,
         )
         assertEquals(listOf(5), bytes(windowsHome.resolve("RobotMC Installer/app/robotmc-installer.jar")))
+        assertEquals(listOf(4), bytes(windowsHome.resolve("RobotMC Installer/$INSTALLER_APP_NAME.exe")))
+        exe.toFile().setWritable(true)
+        Files.write(exe, byteArrayOf(6))
+        exe.toFile().setReadOnly()
+        Files.write(windows.resolve("app/robotmc-installer.jar"), byteArrayOf(9))
+        val replacedWindows = stableInstallerCommand(listOf(exe.toString()), windowsHome)
+        assertEquals(storedWindows, replacedWindows)
+        assertEquals(listOf(6), bytes(windowsHome.resolve("RobotMC Installer/$INSTALLER_APP_NAME.exe")))
+        assertEquals(listOf(9), bytes(windowsHome.resolve("RobotMC Installer/app/robotmc-installer.jar")))
+        assertFalse(Files.exists(windowsHome.resolve("RobotMC Installer.staging")))
     }
 
     @Test

@@ -7,6 +7,7 @@ import java.nio.file.Files
 import java.nio.file.LinkOption
 import java.nio.file.Path
 import java.nio.file.StandardCopyOption
+import java.nio.file.attribute.DosFileAttributeView
 import java.util.Comparator
 
 const val STABLE_INSTALLER_JAR = "robotmc-installer.jar"
@@ -89,7 +90,7 @@ private fun copyInstallerFile(source: Path, destination: Path) {
         Files.copy(src, staging, StandardCopyOption.REPLACE_EXISTING, StandardCopyOption.COPY_ATTRIBUTES)
         moveReplacing(staging, dest)
     } catch (exception: Exception) {
-        Files.deleteIfExists(staging)
+        deleteIfExists(staging)
         if (exception is UserException) {
             throw exception
         }
@@ -115,7 +116,7 @@ private fun copyInstallerTree(source: Path, destination: Path) {
                 when {
                     Files.isSymbolicLink(path) -> {
                         target.parent?.let { Files.createDirectories(it) }
-                        Files.deleteIfExists(target)
+                        deleteIfExists(target)
                         Files.createSymbolicLink(target, Files.readSymbolicLink(path))
                     }
                     Files.isDirectory(path) -> Files.createDirectories(target)
@@ -160,6 +161,21 @@ private fun deleteTree(path: Path) {
         return
     }
     Files.walk(path).use { stream ->
-        stream.sorted(Comparator.reverseOrder()).forEach { Files.deleteIfExists(it) }
+        stream.sorted(Comparator.reverseOrder()).forEach { deleteIfExists(it) }
     }
+}
+
+/**
+ * JDK 25의 jpackage는 Windows 런처에 읽기 전용 속성을 붙인다.
+ * 그 비트는 7z SFX까지 남고, 끄기 전에는 DeleteFile이 거부한다.
+ */
+private fun deleteIfExists(path: Path) {
+    if (!Files.exists(path, LinkOption.NOFOLLOW_LINKS)) {
+        return
+    }
+    val dos = Files.getFileAttributeView(path, DosFileAttributeView::class.java, LinkOption.NOFOLLOW_LINKS)
+    if (dos != null && dos.readAttributes().isReadOnly) {
+        dos.setReadOnly(false)
+    }
+    Files.deleteIfExists(path)
 }
