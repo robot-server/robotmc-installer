@@ -19,9 +19,14 @@ class InstallerReplace private constructor() {
             var staged: String? = null
             var javaBin: String? = null
             var waitPid: String? = null
+            val applicationArguments = mutableListOf<String>()
             var index = 0
             while (index < args.size) {
                 val key = args[index]
+                if (key == "--") {
+                    applicationArguments += args.drop(index + 1)
+                    break
+                }
                 if (index + 1 >= args.size) {
                     throw IllegalArgumentException("Missing value for $key")
                 }
@@ -49,7 +54,7 @@ class InstallerReplace private constructor() {
                 javaCommand,
                 "-jar",
                 targetPath.toAbsolutePath().normalize().toString(),
-            )
+            ) + applicationArguments
             println(command.joinToString("\u0000"))
             System.out.flush()
             ProcessBuilder(command)

@@ -2,9 +2,11 @@ package com.sysbot32.robotmc.installer.config
 
 import com.sysbot32.robotmc.installer.prelaunch.installerJavaExecutable
 import com.sysbot32.robotmc.installer.update.PreparedInstallerUpdate
+import com.sysbot32.robotmc.installer.update.applicationRelaunchArguments
 import com.sysbot32.robotmc.installer.update.armInstallerUpdate
 import com.sysbot32.robotmc.installer.update.installerStagingPath
 import com.sysbot32.robotmc.installer.update.replaceHelperJar
+import com.sysbot32.robotmc.installer.update.runInstallerUpdate
 import com.sysbot32.robotmc.installer.update.runningInstallerJar
 import org.junit.jupiter.api.io.TempDir
 import java.io.IOException
@@ -121,6 +123,67 @@ class InstallerSelfUpdateTest {
         assertTrue(verified.contentEquals(first))
         assertTrue(verified.contentEquals(second))
         assertTrue(first.contentEquals(second))
+    }
+
+    @Test
+    fun relaunchKeepsTheOriginalInstallerArguments() {
+        assertEquals(emptyList(), applicationRelaunchArguments(emptyList()))
+        val kept = listOf(
+            "--installer.mode=uninstall",
+            "--installer.launcher-restart=true",
+            "--installer.minecraft.directory=/tmp/minecraft custom",
+        )
+        assertEquals(listOf("--") + kept, applicationRelaunchArguments(kept))
+        val helper = replaceHelperJar(root.resolve("helper-args"))
+        val verified = markerJar()
+        val directory = root.resolve("args")
+        Files.createDirectories(directory)
+        val target = directory.resolve("installer.jar")
+        val staged = installerStagingPath(target)
+        Files.write(target, byteArrayOf(1, 2, 3, 4))
+        Files.write(staged, verified)
+        val replacer = startReplacer(target, staged, null, helper, kept)
+        val output = replacer.inputStream.readBytes().decodeToString()
+        assertTrue(replacer.waitFor(30, java.util.concurrent.TimeUnit.SECONDS), output)
+        assertEquals(0, replacer.exitValue(), output)
+        val argv = output.trim().split('\u0000')
+        assertEquals("-jar", argv[1], output)
+        assertEquals(target.toRealPath(), Path.of(argv[2]).toRealPath())
+        assertEquals(kept, argv.drop(3))
+        val marked = Path.of(awaitMarker(target, output).lineSequence().first())
+        assertEquals(target.toRealPath(), marked.toRealPath())
+    }
+
+    @Test
+    fun replaceStartupFailureReturnsToTheInstaller() {
+        val directory = Files.createTempDirectory(root, "spawn-fail")
+        val target = directory.resolve("installer.jar")
+        Files.write(target, LIVE_BYTES)
+        var spawned = false
+        val result = runInstallerUpdate(
+            properties = InstallerProperties(
+                minecraft = InstallerProperties.Minecraft(version = "1.21.11"),
+                mod = null,
+                update = InstallerProperties.Update(
+                    app = app(
+                        version = "9.9.9",
+                        windowsSha = WINDOWS_SHA,
+                        macosSha = WINDOWS_SHA,
+                        linuxSha = WINDOWS_SHA,
+                    ),
+                ),
+            ),
+            onProgress = { _, _ -> },
+            target = target,
+            fetch = { _ -> WINDOWS_BYTES.inputStream() },
+            spawn = { _, _, _ ->
+                spawned = true
+                throw java.nio.file.AccessDeniedException(target.toString())
+            },
+        )
+        assertTrue(spawned)
+        assertFalse(result)
+        assertTrue(LIVE_BYTES.contentEquals(Files.readAllBytes(target)))
     }
 
     @Test
@@ -282,7 +345,13 @@ class InstallerSelfUpdateTest {
         return replaced
     }
 
-    private fun startReplacer(target: Path, staged: Path, waitPid: Long?, helperJar: Path): Process {
+    private fun startReplacer(
+        target: Path,
+        staged: Path,
+        waitPid: Long?,
+        helperJar: Path,
+        applicationArguments: List<String> = emptyList(),
+    ): Process {
         val javaBin = installerJavaExecutable()
         val command = mutableListOf(
             javaBin,
@@ -297,6 +366,10 @@ class InstallerSelfUpdateTest {
         )
         if (waitPid != null) {
             command += listOf("--wait-pid", waitPid.toString())
+        }
+        if (applicationArguments.isNotEmpty()) {
+            command += "--"
+            command += applicationArguments
         }
         return ProcessBuilder(command).redirectErrorStream(true).start()
     }

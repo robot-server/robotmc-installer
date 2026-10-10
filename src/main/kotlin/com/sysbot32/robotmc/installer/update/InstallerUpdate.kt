@@ -218,22 +218,41 @@ internal fun installerUpdateDue(properties: InstallerProperties): Boolean {
 /**
  * 진행 화면이 뜬 뒤에 호출한다. 성공하면 교체 프로세스를 예약하고 true 를 반환한다.
  */
+internal object InstallerRelaunch {
+    @Volatile
+    var arguments: List<String> = emptyList()
+}
+
 internal fun runInstallerUpdate(
     properties: InstallerProperties,
-    onProgress: (read: Long, total: Long?) -> Unit,
+    target: Path? = runningInstallerJar(),
+    fetch: (URI) -> InputStream = ::openHttpsArtifact,
+    spawn: (Path, Path, Long) -> Unit = { stagedTarget, staged, waitPid ->
+        spawnInstallerReplace(stagedTarget, staged, waitPid)
+    },
+    onProgress: (read: Long, total: Long?) -> Unit = { _, _ -> },
 ): Boolean {
-    val target = runningInstallerJar() ?: return false
-    val prepared = prepareInstallerUpdate(
-        app = properties.update.app,
-        packagedVersion = applicationVersion(),
-        osName = System.getProperty("os.name", ""),
-        target = target,
-        fetch = ::openHttpsArtifact,
-        onProgress = onProgress,
-    ) ?: return false
-    spawnInstallerReplace(prepared.target, prepared.staged, ProcessHandle.current().pid())
-    log.info { "Installer update ${properties.update.app.version} staged at ${prepared.staged}" }
-    return true
+    if (target == null) {
+        return false
+    }
+    return try {
+        val prepared = prepareInstallerUpdate(
+            app = properties.update.app,
+            packagedVersion = applicationVersion(),
+            osName = System.getProperty("os.name", ""),
+            target = target,
+            fetch = fetch,
+            onProgress = onProgress,
+        ) ?: return false
+        spawn(prepared.target, prepared.staged, ProcessHandle.current().pid())
+        log.info { "Installer update ${properties.update.app.version} staged at ${prepared.staged}" }
+        true
+    } catch (cancelled: java.util.concurrent.CancellationException) {
+        throw cancelled
+    } catch (exception: Exception) {
+        log.warn(exception) { "Installer update was not armed" }
+        false
+    }
 }
 
 internal fun runningInstallerJar(
@@ -343,6 +362,13 @@ internal fun replaceHelperJar(root: Path = defaultReplaceRoot()): Path {
     return destination
 }
 
+internal fun applicationRelaunchArguments(arguments: List<String> = InstallerRelaunch.arguments): List<String> {
+    if (arguments.isEmpty()) {
+        return emptyList()
+    }
+    return listOf("--") + arguments
+}
+
 internal fun spawnInstallerReplace(target: Path, staged: Path, waitPid: Long) {
     val javaBin = installerJavaExecutable()
     val helper = replaceHelperJar()
@@ -358,7 +384,7 @@ internal fun spawnInstallerReplace(target: Path, staged: Path, waitPid: Long) {
         staged.toAbsolutePath().normalize().toString(),
         "--java",
         javaBin,
-    )
+    ) + applicationRelaunchArguments()
     ProcessBuilder(command)
         .redirectOutput(ProcessBuilder.Redirect.DISCARD)
         .redirectError(ProcessBuilder.Redirect.DISCARD)

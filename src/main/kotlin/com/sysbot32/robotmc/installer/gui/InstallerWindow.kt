@@ -83,13 +83,20 @@ fun InstallerUpdateProgress(
         height = 220.dp,
     )
     LaunchedEffect(Unit) {
-        val success = withContext(Dispatchers.IO) {
-            runInstallerUpdate(properties) { done, size ->
-                SwingUtilities.invokeLater {
-                    read = done
-                    total = size
+        val success = try {
+            withContext(Dispatchers.IO) {
+                runInstallerUpdate(properties) { done, size ->
+                    SwingUtilities.invokeLater {
+                        read = done
+                        total = size
+                    }
                 }
             }
+        } catch (cancelled: java.util.concurrent.CancellationException) {
+            throw cancelled
+        } catch (exception: Exception) {
+            log.warn(exception) { "Installer update failed" }
+            false
         }
         onFinished(success)
     }
