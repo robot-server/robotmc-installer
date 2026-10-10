@@ -120,7 +120,7 @@ jobs:
 
       - name: Build the Windows app image and pack one 7-Zip SFX
         shell: bash
-        run: ./gradlew packageInstallerAppImage packageWindowsSfx --console=plain -PreleaseRef="${GITHUB_REF_NAME}"
+        run: ./gradlew hostOnlyBootJar packageInstallerAppImage packageWindowsSfx --console=plain -PreleaseRef="${GITHUB_REF_NAME}"
 
       - name: Upload the exe to the GitHub Release
         shell: bash

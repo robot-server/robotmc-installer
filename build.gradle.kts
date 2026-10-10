@@ -45,6 +45,8 @@ repositories {
     google()
 }
 
+lateinit var hostDesktopCoordinate: String
+
 dependencies {
     implementation(project(":prelaunch"))
     implementation("org.springframework.boot:spring-boot-starter-web")
@@ -52,14 +54,16 @@ dependencies {
     implementation("io.github.oshai:kotlin-logging-jvm:7.0.7")
     implementation("org.apache.commons:commons-exec:1.4.0")
     implementation("dev.dewy:nbt:1.5.1")
-    // bootJar는 OS와 상관없이 그대로 쓰는 실행 jar다. currentOs만 넣으면 다른 OS 네이티브가 빠진다.
-    // 현재 OS 앱 이미지는 이 jar를 감싼다.
+    // 릴리스 bootJar는 OS와 상관없이 그대로 쓰는 실행 jar다. currentOs만 넣으면 다른 OS 네이티브가 빠진다.
+    // Windows exe가 넣는 jar는 hostOnlyBootJar다. 그쪽만 compose.desktop.currentOs로 좁힌다.
     implementation(compose.desktop.linux_arm64)
     implementation(compose.desktop.linux_x64)
     implementation(compose.desktop.macos_arm64)
     implementation(compose.desktop.macos_x64)
     implementation(compose.desktop.windows_arm64)
     implementation(compose.desktop.windows_x64)
+    // dependencies 블록 안에서만 compose.desktop.currentOs 를 볼 수 있다.
+    hostDesktopCoordinate = compose.desktop.currentOs
     implementation(compose.material3)
     developmentOnly("org.springframework.boot:spring-boot-devtools")
     annotationProcessor("org.springframework.boot:spring-boot-configuration-processor")
@@ -87,18 +91,25 @@ tasks.named<org.springframework.boot.gradle.tasks.bundling.BootJar>("bootJar") {
     // 이 두 모듈은 클래스가 없는 리다이렉트다. 파일 이름이 androidx의 실제 jar와 같아서
     // bootJar가 실패한다. duplicatesStrategy = EXCLUDE는 runtime-desktop에서 빈 jar가 앞에 있어
     // 클래스 있는 쪽을 버린다.
+    val redirects by lazy { runtimeDesktopRedirectJars() }
+    classpath = classpath.filter { file -> file !in redirects }
+}
+
+// 앱 이미지와 Windows SFX가 넣는 bootJar. 릴리스 잡의 bootJar와 출력이 다르다.
+val hostOnlyBootJar = tasks.register<org.springframework.boot.gradle.tasks.bundling.BootJar>("hostOnlyBootJar") {
+    group = "build"
+    description = "현재 OS의 Skiko만 넣은 bootJar. 앱 이미지가 이 jar를 넣는다."
+    val releaseJar = tasks.named<org.springframework.boot.gradle.tasks.bundling.BootJar>("bootJar")
+    archiveBaseName.set(releaseJar.flatMap { it.archiveBaseName })
+    archiveVersion.set(releaseJar.flatMap { it.archiveVersion })
+    destinationDirectory.set(layout.buildDirectory.dir("host-boot-jar"))
+    mainClass.set(releaseJar.flatMap { it.mainClass })
+    targetJavaVersion.set(releaseJar.flatMap { it.targetJavaVersion })
     val runtimeClasspath = configurations.runtimeClasspath
-    classpath = classpath.filter { file ->
-        val dropped = runtimeClasspath.get().resolvedConfiguration.resolvedArtifacts
-            .filter { artifact ->
-                val id = artifact.moduleVersion.id
-                id.group == "org.jetbrains.compose.runtime" &&
-                    (id.name == "runtime-desktop" || id.name == "runtime-saveable-desktop")
-            }
-            .map { it.file }
-            .toSet()
-        file !in dropped
-    }
+    resolvedArtifacts(runtimeClasspath.get().incoming.artifacts.resolvedArtifacts)
+    val excluded by lazy { runtimeDesktopRedirectJars() + foreignSkikoFiles() }
+    classpath = releaseJar.get().classpath.filter { file -> file !in excluded }
+    dependsOn(tasks.named("classes"))
 }
 
 // Package.implementationVersion 은 테스트의 디렉터리 클래스패스와 bootJar 의 BOOT-INF/classes 에서 비어 있다.
@@ -161,19 +172,23 @@ val installerJdk = extensions.getByType(JavaToolchainService::class.java).launch
 val installerBootJar = tasks.named<org.springframework.boot.gradle.tasks.bundling.BootJar>("bootJar")
     .flatMap { it.archiveFile }
 
+val installerHostBootJar = hostOnlyBootJar.flatMap { it.archiveFile }
+
 tasks.withType<Test> {
     dependsOn(installerBootJar)
+    dependsOn(installerHostBootJar)
     systemProperty("robotmc.boot.jar", installerBootJar.get().asFile.absolutePath)
+    systemProperty("robotmc.host.boot.jar", installerHostBootJar.get().asFile.absolutePath)
 }
 val installerAppImageDir = layout.buildDirectory.dir("installer-app-image")
 val installerAppImageWork = layout.buildDirectory.dir("tmp/installer-app-image")
 
 tasks.register("packageInstallerAppImage") {
     group = "distribution"
-    description = "현재 OS용 앱 이미지에 Java $installerJdkMajor 런타임과 bootJar를 넣는다."
-    dependsOn(installerBootJar)
+    description = "현재 OS용 앱 이미지에 Java $installerJdkMajor 런타임과 현재 OS Skiko만 넣은 jar를 넣는다."
+    dependsOn(installerHostBootJar)
     val appIcon = InstallerAppIcon.fileFor(installerHostOs(), project.rootDir)
-    inputs.file(installerBootJar)
+    inputs.file(installerHostBootJar)
     inputs.file(appIcon)
     inputs.property("version", providers.provider { project.version.toString() })
     inputs.property("jdk", installerJdk.map { it.metadata.installationPath.asFile.absolutePath })
@@ -181,7 +196,7 @@ tasks.register("packageInstallerAppImage") {
     doLast {
         buildInstallerAppImage(
             jdkHome = installerJdk.get().metadata.installationPath.asFile,
-            bootJar = installerBootJar.get().asFile,
+            copiedJar = installerHostBootJar.get().asFile,
             destination = installerAppImageDir.get().asFile,
             work = installerAppImageWork.get().asFile,
             appVersion = project.version.toString(),
@@ -234,7 +249,7 @@ tasks.register("checkInstallerAppImage") {
     description = "앱 이미지의 런처와 포함된 Java $installerJdkMajor java를 검사한다."
     val appIcon = InstallerAppIcon.fileFor(installerHostOs(), project.rootDir)
     dependsOn("packageInstallerAppImage")
-    inputs.file(installerBootJar)
+    inputs.file(installerHostBootJar)
     inputs.file(appIcon)
     inputs.dir(installerAppImageDir)
     inputs.property("jdk", installerJdk.map { it.metadata.installationPath.asFile.absolutePath })
@@ -251,7 +266,7 @@ tasks.register("checkInstallerAppImage") {
         }
         val result = verifyInstallerAppImage(
             imageDir = installerAppImageDir.get().asFile,
-            bootJar = installerBootJar.get().asFile,
+            copiedJar = installerHostBootJar.get().asFile,
             jdkHome = installerJdk.get().metadata.installationPath.asFile,
             iconFile = appIcon,
         )
@@ -269,17 +284,17 @@ tasks.register("checkInstallerAppImage") {
 
 fun buildInstallerAppImage(
     jdkHome: File,
-    bootJar: File,
+    copiedJar: File,
     destination: File,
     work: File,
     appVersion: String,
     icon: File,
 ) {
-    val mainClass = JarFile(bootJar).use { jar ->
+    val mainClass = JarFile(copiedJar).use { jar ->
         jar.manifest?.mainAttributes?.getValue("Main-Class")
     }
     if (mainClass != bootJarMainClass) {
-        throw org.gradle.api.GradleException("bootJar Main-Class가 $bootJarMainClass 이 아닙니다: $mainClass")
+        throw org.gradle.api.GradleException("앱 이미지에 넣은 jar의 Main-Class가 $bootJarMainClass 이 아닙니다: $mainClass")
     }
     if (destination.exists() && !destination.deleteRecursively()) {
         throw org.gradle.api.GradleException("이전 앱 이미지를 지우지 못했습니다: ${destination.absolutePath}")
@@ -292,7 +307,7 @@ fun buildInstallerAppImage(
     if (!input.mkdirs() || !destination.mkdirs()) {
         throw org.gradle.api.GradleException("앱 이미지 디렉터리를 만들지 못했습니다.")
     }
-    bootJar.copyTo(File(input, bootJar.name))
+    copiedJar.copyTo(File(input, copiedJar.name))
     // jpackage 기본 jlink는 --strip-native-commands 라서 java가 빠지고, 모듈도 앱이 직접 쓰는 것만 남긴다.
     // 모드 로더 설치 jar는 이 런타임의 java로 실행하므로 JDK 모듈 전체를 남긴다.
     runCaptured(
@@ -314,7 +329,7 @@ fun buildInstallerAppImage(
         "--vendor", "RobotMC",
         "--app-version", appVersion,
         "--input", input.absolutePath,
-        "--main-jar", bootJar.name,
+        "--main-jar", copiedJar.name,
         "--main-class", bootJarMainClass,
         "--runtime-image", runtime.absolutePath,
         "--description", installerAppName,
@@ -338,7 +353,7 @@ data class InstallerImageCheck(
     val appIconName: String,
 )
 
-fun verifyInstallerAppImage(imageDir: File, bootJar: File, jdkHome: File, iconFile: File): InstallerImageCheck {
+fun verifyInstallerAppImage(imageDir: File, copiedJar: File, jdkHome: File, iconFile: File): InstallerImageCheck {
     val paths = installerImagePaths(imageDir)
     if (!paths.launcher.isFile) {
         throw org.gradle.api.GradleException("런처가 없습니다: ${paths.launcher.absolutePath}")
@@ -358,13 +373,14 @@ fun verifyInstallerAppImage(imageDir: File, bootJar: File, jdkHome: File, iconFi
     if (launchers.size != 1 || launchers.single().canonicalFile != paths.launcher.canonicalFile) {
         throw org.gradle.api.GradleException("진입 런처가 하나가 아닙니다: ${launchers.map { it.name }}")
     }
+    // 해시는 이 빌드가 이미지에 복사한 jar와 비교한다. Ubuntu에서 올린 여섯 타깃 jar와 같아야 하는 검사가 아니다.
     val jars = paths.appDir.listFiles { file -> file.isFile && file.extension == "jar" }?.toList().orEmpty()
-    if (jars.size != 1 || jars.single().name != bootJar.name || sha256(jars.single()) != sha256(bootJar)) {
-        throw org.gradle.api.GradleException("이미지 안의 jar가 bootJar와 다릅니다.")
+    if (jars.size != 1 || jars.single().name != copiedJar.name || sha256(jars.single()) != sha256(copiedJar)) {
+        throw org.gradle.api.GradleException("이미지 안의 jar가 앱 이미지에 넣은 jar와 다릅니다.")
     }
     val cfg = paths.appDir.listFiles { file -> file.isFile && file.extension == "cfg" }?.toList().orEmpty()
-    if (cfg.size != 1 || bootJarMainClass !in cfg.single().readText() || bootJar.name !in cfg.single().readText()) {
-        throw org.gradle.api.GradleException("런처 설정이 bootJar를 가리키지 않습니다.")
+    if (cfg.size != 1 || bootJarMainClass !in cfg.single().readText() || copiedJar.name !in cfg.single().readText()) {
+        throw org.gradle.api.GradleException("런처 설정이 앱 이미지에 넣은 jar를 가리키지 않습니다.")
     }
     val versionOutput = runCaptured(listOf(javaCanonical.absolutePath, "-version"))
     val major = javaMajor(versionOutput)
@@ -504,6 +520,40 @@ fun installerImagePaths(destination: File): InstallerImagePaths {
             )
         }
     }
+}
+
+fun runtimeDesktopRedirectJars(): Set<File> {
+    return project.configurations.runtimeClasspath.get().resolvedConfiguration.resolvedArtifacts
+        .filter { artifact ->
+            val id = artifact.moduleVersion.id
+            id.group == "org.jetbrains.compose.runtime" &&
+                (id.name == "runtime-desktop" || id.name == "runtime-saveable-desktop")
+        }
+        .map { it.file }
+        .toSet()
+}
+
+// compose.desktop.currentOs의 전이 의존성만 남기고, 나머지 desktop-jvm 타깃의 Skiko는 뺀다.
+fun foreignSkikoFiles(): Set<File> {
+    val desktopDependencies = project.configurations.runtimeClasspath.get()
+        .resolvedConfiguration
+        .firstLevelModuleDependencies
+        .filter { dependency ->
+            dependency.moduleGroup == "org.jetbrains.compose.desktop" &&
+                dependency.moduleName.startsWith("desktop-jvm-")
+        }
+    val host = desktopDependencies.singleOrNull { dependency ->
+        hostDesktopCoordinate == "${dependency.moduleGroup}:${dependency.moduleName}:${dependency.moduleVersion}"
+    } ?: throw org.gradle.api.GradleException(
+        "compose.desktop.currentOs($hostDesktopCoordinate)가 릴리스 classpath에 없습니다.",
+    )
+    val hostFiles = host.allModuleArtifacts.map { it.file }.toSet()
+    return desktopDependencies
+        .filter { it.moduleName != host.moduleName }
+        .flatMap { it.allModuleArtifacts }
+        .map { it.file }
+        .filter { it !in hostFiles }
+        .toSet()
 }
 
 fun installerHostOs(): String {

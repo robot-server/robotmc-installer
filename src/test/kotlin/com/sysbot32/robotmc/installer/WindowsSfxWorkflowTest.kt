@@ -48,7 +48,11 @@ class WindowsSfxWorkflowTest {
 
         val releaseScripts = runScripts(releaseJob)
         assertTrue(releaseScripts.any { it.contains(exactTag) })
-        assertTrue(releaseScripts.any { it.contains("./gradlew bootJar") && it.contains("-PreleaseRef=") })
+        val releaseBoot = releaseScripts.single { it.contains("./gradlew bootJar") }
+        assertTrue(releaseBoot.contains("-PreleaseRef="))
+        assertFalse(releaseBoot.contains("hostOnlyBootJar"))
+        assertFalse(releaseBoot.contains("currentOs"))
+        assertFalse(releaseScripts.joinToString("\n").contains("hostOnlyBootJar"))
         val jarUpload = releaseScripts.single { it.contains("gh release create") }
         assertTrue(jarUpload.contains("robotmc-installer-"))
         assertTrue(jarUpload.contains(".jar"))
@@ -63,6 +67,7 @@ class WindowsSfxWorkflowTest {
         assertTrue(windowsScripts.any { it.contains(exactTag) })
         assertEquals("bash", shellOfRunSteps(windowsJob).toSet().single())
         val pack = windowsScripts.single { it.contains("packageWindowsSfx") }
+        assertTrue(pack.contains("hostOnlyBootJar"))
         assertTrue(pack.contains("packageInstallerAppImage"))
         assertTrue(pack.contains("-PreleaseRef="))
         assertFalse(pack.contains("-PsfxModule="))
@@ -87,7 +92,18 @@ class WindowsSfxWorkflowTest {
             assertFalse(scripts.contains("packageInstallerAppImage"), name)
             assertFalse(scripts.contains("packageWindowsSfx"), name)
             assertFalse(scripts.contains("jpackage"), name)
+            assertFalse(scripts.contains("hostOnlyBootJar"), name)
         }
+        val buildScript = File(root, "build.gradle.kts").readText()
+        assertTrue(buildScript.contains("compose.desktop.currentOs"))
+        val imageTask = buildScript.substringAfter("tasks.register(\"packageInstallerAppImage\")")
+            .substringBefore("tasks.register(\"packageWindowsSfx\")")
+        assertTrue(imageTask.contains("copiedJar = installerHostBootJar.get().asFile"))
+        assertFalse(imageTask.contains("installerBootJar"))
+        val checkTask = buildScript.substringAfter("tasks.register(\"checkInstallerAppImage\")")
+            .substringBefore("fun buildInstallerAppImage")
+        assertTrue(checkTask.contains("copiedJar = installerHostBootJar.get().asFile"))
+        assertFalse(checkTask.contains("installerBootJar"))
     }
 }
 
