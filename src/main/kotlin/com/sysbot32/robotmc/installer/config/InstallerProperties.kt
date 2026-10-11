@@ -12,7 +12,6 @@ const val DEFAULT_PROFILE_NAME = "RobotMC"
 const val DEFAULT_PROFILE_KEY = "robotmc"
 const val DEFAULT_VERSION_ID = "RobotMC"
 const val DEFAULT_GAME_DIRECTORY_NAME = "robotmc"
-const val DEFAULT_PROFILE_ICON = "Redstone_Block"
 
 /** 마인크래프트 디렉터리 바로 아래에서 게임이 쓰는 폴더. 게임 폴더 이름으로 쓰면 제거가 그 데이터를 지운다. */
 val MINECRAFT_ROOT_DIRECTORY_NAMES = setOf(
@@ -50,8 +49,8 @@ data class InstallerProperties(
     val versionId: String = DEFAULT_VERSION_ID,
     /** 마인크래프트 디렉터리 아래 게임 폴더 이름. application.yml 의 game-directory-name. */
     val gameDirectoryName: String = DEFAULT_GAME_DIRECTORY_NAME,
-    /** 런처 프로필 아이콘. application.yml 의 profile-icon. 내장 텍스처 이름. */
-    val profileIcon: String = DEFAULT_PROFILE_ICON,
+    /** 런처 프로필 아이콘. application.yml 의 profile-icon. 비어 있으면 아이콘을 넣지 않는다. */
+    val profileIcon: String = "",
     /**
      * 디스크의 로더는 맞는데, 켜져 있는 런처가 예전 로더로 게임을 다시 띄운 경우.
      * 설치는 하지 않고 런처를 껐다 켜 달라는 안내만 연다.
@@ -157,9 +156,9 @@ fun InstallerProperties.profileDisplayName(): String {
     return this.profileName.trim().ifBlank { DEFAULT_PROFILE_NAME }
 }
 
-/** 구성의 프로필 아이콘. 공백만 있으면 [DEFAULT_PROFILE_ICON]. */
+/** 구성의 프로필 아이콘. 공백이면 빈 문자열이고, 프로필에는 넣지 않는다. */
 fun InstallerProperties.profileDisplayIcon(): String {
-    return this.profileIcon.trim().ifBlank { DEFAULT_PROFILE_ICON }
+    return this.profileIcon.trim()
 }
 
 /** 구성의 프로필 키. 비어 있거나 경로로 쓰면 [DEFAULT_PROFILE_KEY]. */

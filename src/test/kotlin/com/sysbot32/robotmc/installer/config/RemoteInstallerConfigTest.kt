@@ -74,7 +74,7 @@ class RemoteInstallerConfigTest {
         assertEquals(installer["game-directory-name"].toString(), bound.gameDirectoryName)
         assertEquals(DEFAULT_GAME_DIRECTORY_NAME, bound.gameDirectory().fileName.toString())
         assertEquals(installer["profile-icon"].toString(), bound.profileIcon)
-        assertEquals(DEFAULT_PROFILE_ICON, bound.profileDisplayIcon())
+        assertEquals(installer["profile-icon"].toString(), bound.profileDisplayIcon())
         val custom = bindInstaller(
             """
             installer:
@@ -91,7 +91,7 @@ class RemoteInstallerConfigTest {
         assertEquals("mypack", custom.launcherProfileKey())
         assertEquals(DEFAULT_VERSION_ID, custom.launcherVersionId())
         assertEquals(DEFAULT_GAME_DIRECTORY_NAME, custom.gameDirectory().fileName.toString())
-        assertEquals(DEFAULT_PROFILE_ICON, custom.profileDisplayIcon())
+        assertEquals("", custom.profileDisplayIcon())
     }
 
     @Test
@@ -567,7 +567,7 @@ installer:
     mods:
       - download-url: 'https://example.com/from-main-shape.jar'
   servers:
-    - ip: minecraft.o-r.cc
+    - ip: play.example
       name: Other Server
   resource-packs:
     - download-url: 'https://example.com/pack-from-main.zip'

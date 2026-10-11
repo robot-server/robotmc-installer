@@ -68,14 +68,14 @@ class InstallerSessionTest {
             assertEquals(1, session.state.value.completedSteps)
             assertEquals("모드 다운로드 중: iris.jar", session.state.value.status)
 
-            progress.setStatus("서버 추가 중: Robot Server")
+            progress.setStatus("서버 추가 중: Example")
             progress.step(2)
             assertEquals(3, session.state.value.completedSteps)
             assertEquals(
                 listOf(
                     "모드 폴더 준비 중...",
                     "모드 다운로드 중: iris.jar",
-                    "서버 추가 중: Robot Server",
+                    "서버 추가 중: Example",
                 ),
                 session.state.value.statuses,
             )

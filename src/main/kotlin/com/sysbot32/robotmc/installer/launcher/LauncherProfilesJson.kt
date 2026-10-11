@@ -2,7 +2,6 @@ package com.sysbot32.robotmc.installer.launcher
 
 import com.fasterxml.jackson.databind.ObjectMapper
 import com.fasterxml.jackson.databind.node.ObjectNode
-import com.sysbot32.robotmc.installer.config.DEFAULT_PROFILE_ICON
 import com.sysbot32.robotmc.installer.config.DEFAULT_PROFILE_KEY
 import com.sysbot32.robotmc.installer.config.DEFAULT_VERSION_ID
 import com.sysbot32.robotmc.installer.config.pathSegment
@@ -41,9 +40,9 @@ data class LauncherProfilesJson(
          */
         val lastUsed: OffsetDateTime?,
         /**
-         * A Base64-encoded image which represents the icon of the profile in the profiles menu.
+         * A built-in texture name or a Base64 image. Absent when this installer does not set one.
          */
-        val icon: String,
+        val icon: String?,
         /**
          * The version ID that the profile targets. Version IDs are determined in the version.json in every directory in ~/versions
          */
@@ -101,7 +100,7 @@ fun editRobotMcLauncherProfile(
     profileName: String,
     profileKey: String = DEFAULT_PROFILE_KEY,
     versionId: String = DEFAULT_VERSION_ID,
-    profileIcon: String = DEFAULT_PROFILE_ICON,
+    profileIcon: String = "",
     javaAgentJar: Path? = null,
     javaAgentOptions: Path? = null,
 ): String {
@@ -129,7 +128,8 @@ fun editRobotMcLauncherProfile(
     if (profile.putTextIfDifferent("name", profileName)) {
         changed = true
     }
-    if (profile.putTextIfDifferent("icon", profileIcon)) {
+    val icon = profileIcon.trim()
+    if (icon.isNotEmpty() && profile.putTextIfDifferent("icon", icon)) {
         changed = true
     }
     if (profile.putTextIfDifferent("lastVersionId", version)) {

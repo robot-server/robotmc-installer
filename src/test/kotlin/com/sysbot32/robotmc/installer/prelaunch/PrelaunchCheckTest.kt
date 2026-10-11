@@ -1,7 +1,6 @@
 package com.sysbot32.robotmc.installer.prelaunch
 
 import com.fasterxml.jackson.databind.ObjectMapper
-import com.sysbot32.robotmc.installer.config.DEFAULT_PROFILE_ICON
 import com.sysbot32.robotmc.installer.config.InstallerProperties
 import com.sysbot32.robotmc.installer.config.configFileName
 import com.sysbot32.robotmc.installer.config.gameDirectory
@@ -65,7 +64,7 @@ class PrelaunchCheckTest {
         val robotmc = after.get("profiles").get("robotmc")
         assertEquals("RobotMC", robotmc.get("name").asText())
         assertEquals("RobotMC", robotmc.get("lastVersionId").asText())
-        assertEquals(DEFAULT_PROFILE_ICON, robotmc.get("icon").asText())
+        assertEquals("Grass", robotmc.get("icon").asText())
         assertEquals("2020-01-01T00:00:00Z", robotmc.get("created").asText())
         assertEquals(true, robotmc.get("unknownProfileField").get("keep").asBoolean())
         assertEquals(gameDir.toString(), robotmc.get("gameDir").asText())

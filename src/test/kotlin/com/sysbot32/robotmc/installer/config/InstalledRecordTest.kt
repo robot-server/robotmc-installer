@@ -169,7 +169,7 @@ class InstalledRecordTest {
         Files.createDirectories(minecraft.resolve("saves/World"))
         Files.writeString(minecraft.resolve("saves/World/level.dat"), "save")
         val properties = properties(minecraft, mods = emptyList(), packs = emptyList()).copy(
-            servers = listOf(ServersDat.Server(ip = "minecraft.o-r.cc", name = "Robot Server")),
+            servers = listOf(ServersDat.Server(ip = "play.example", name = "Example")),
         )
         val service = ServerService(properties, ProgressService())
 
@@ -179,8 +179,8 @@ class InstalledRecordTest {
         assertTrue(Files.isRegularFile(gameDir.resolve("servers.dat")))
         assertFalse(Files.exists(gameDir.resolve("saves")))
         assertEquals("save", Files.readString(minecraft.resolve("saves/World/level.dat")))
-        assertEquals(listOf("minecraft.o-r.cc"), service.getServers().servers.map { it.ip })
-        assertEquals(listOf("Robot Server"), service.getServers().servers.map { it.name })
+        assertEquals(listOf("play.example"), service.getServers().servers.map { it.ip })
+        assertEquals(listOf("Example"), service.getServers().servers.map { it.name })
 
         service.uninstall()
         assertTrue(Files.isRegularFile(gameDir.resolve("servers.dat")))
