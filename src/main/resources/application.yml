@@ -17,17 +17,25 @@ installer:
   game-directory-name: robotmc
   profile-icon: Redstone_Block
   minecraft:
-    version: 1.21.11
+    version: '26.3'
   mod:
     loader:
-      type: neo_forge
-      version: 21.11.6-beta
-      install-options:
-        - '--install-client'
+      type: fabric
+      # 26.3용 Fabric Loader stable.
+      version: '0.19.5'
     mods:
-      - download-url: 'https://cdn.modrinth.com/data/YL57xq9U/versions/Gbr8rEDk/iris-neoforge-1.10.2+mc1.21.11.jar'
-      - download-url: 'https://cdn.modrinth.com/data/lfHFW1mp/versions/LU6sozZq/journeymap-neoforge-1.21.11-6.0.0-beta.53.jar'
-      - download-url: 'https://cdn.modrinth.com/data/AANobbMI/versions/k5Rs4Eru/sodium-neoforge-0.8.0+mc1.21.11.jar'
+      # 요청한 모드의 Modrinth required 의존성. 선택 의존성은 넣지 않는다.
+      # GeckoLib은 The Sift 페이지가 가리키는 버전이 NeoForge jar라 Fabric 5.5.7을 쓴다.
+      - download-url: 'https://cdn.modrinth.com/data/P7dR8mSH/versions/v2j28coa/fabric-api-0.162.0+26.3.jar'
+      - download-url: 'https://cdn.modrinth.com/data/8BmcQJ2H/versions/kSxHvs99/geckolib-fabric-26.3-5.5.7.jar'
+      - download-url: 'https://cdn.modrinth.com/data/9s6osm5g/versions/fg2uyxOW/cloth-config-fabric-26.3.159.jar'
+      - download-url: 'https://cdn.modrinth.com/data/lhGA9TYQ/versions/1pMaB6So/architectury-fabric-22.0.5.jar'
+      - download-url: 'https://cdn.modrinth.com/data/j0IfTxBq/versions/QK8RaspH/mielon''s-the-sift-1.1.2-mc26.3-fabric.jar'
+      - download-url: 'https://cdn.modrinth.com/data/nfn13YXA/versions/rKsAE6bX/RoughlyEnoughItems-26.3.824.jar'
+      - download-url: 'https://cdn.modrinth.com/data/YL57xq9U/versions/vTN4NRGW/iris-fabric-1.11.7+mc26.3.jar'
+      - download-url: 'https://cdn.modrinth.com/data/AANobbMI/versions/bAZQdGpg/sodium-fabric-0.9.2+mc26.3.jar'
+      - download-url: 'https://cdn.modrinth.com/data/NcUtCpym/versions/nz9xjzWi/xaeroworldmap-fabric-26.3-1.47.0.jar'
+      - download-url: 'https://cdn.modrinth.com/data/1bokaNcj/versions/B2aG1aya/xaerominimap-fabric-26.3-26.6.0.jar'
   servers:
     - ip: minecraft.o-r.cc
       name: Robot Server
