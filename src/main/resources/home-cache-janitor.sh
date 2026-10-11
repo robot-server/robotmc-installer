@@ -3,6 +3,7 @@
 set -u
 pid=$1
 home=$2
+cancel=$3
 name=$(basename -- "$home")
 if [ "$name" != ".robotmc-installer" ]; then
   exit 1
@@ -15,6 +16,9 @@ while kill -0 "$pid" 2>/dev/null; do
   sleep 0.2
 done
 sleep 0.3
+if [ -f "$cancel" ]; then
+  exit 0
+fi
 if [ -L "$home" ]; then
   rm -f -- "$home"
 else

@@ -1,5 +1,9 @@
 package com.sysbot32.robotmc.installer.launcher
 
+import ch.qos.logback.classic.LoggerContext
+import ch.qos.logback.classic.encoder.PatternLayoutEncoder
+import ch.qos.logback.classic.spi.ILoggingEvent
+import ch.qos.logback.core.FileAppender
 import com.sysbot32.robotmc.installer.config.DEFAULT_PROFILE_KEY
 import com.sysbot32.robotmc.installer.config.InstallerProperties
 import com.sysbot32.robotmc.installer.config.gameDirectory
@@ -9,6 +13,7 @@ import com.sysbot32.robotmc.installer.mod.loader.ModLoaderType
 import com.sysbot32.robotmc.installer.mod.loader.decideModLoaderInstall
 import com.sysbot32.robotmc.installer.prelaunch.installerJavaExecutable
 import com.sysbot32.robotmc.installer.progress.ProgressService
+import org.slf4j.LoggerFactory
 import org.springframework.http.HttpMethod
 import org.springframework.http.client.ClientHttpRequest
 import org.springframework.http.client.ClientHttpRequestFactory
@@ -171,6 +176,108 @@ class HomeCacheUninstallTest {
             .readTree(Files.readString(world.minecraft.resolve("launcher_profiles.json")))
         assertEquals("RobotMC", written.get("profiles").get(DEFAULT_PROFILE_KEY).get("name").asText())
         assertRealHomeUnchanged(existed)
+    }
+
+    @Test
+    fun finishedUninstallClosesAnOpenLogInsideTheHomeCache() {
+        val world = world()
+        val existed = realHomeExisted()
+        seedHome(world.home, world.linkTarget)
+        val record = gameDirectory(world.minecraft).resolve(".robotmc-installer").resolve("installed.txt")
+        prepareRemovedInstall(world.minecraft, record)
+        val logFile = world.home.resolve("logs/application.log")
+        val context = LoggerFactory.getILoggerFactory() as LoggerContext
+        val encoder = PatternLayoutEncoder()
+        encoder.context = context
+        encoder.pattern = "%msg%n"
+        encoder.start()
+        val appender = FileAppender<ILoggingEvent>()
+        appender.context = context
+        appender.name = "home-cache-open-log"
+        appender.file = logFile.toString()
+        appender.encoder = encoder
+        appender.start()
+        val logger = context.getLogger("home-cache-open-log")
+        logger.isAdditive = false
+        logger.addAppender(appender)
+        try {
+            logger.info("still-open")
+            val service = service(world.minecraft, world.home)
+            service.homeCacheRunningFile = { null }
+            service.uninstall()
+            assertFalse(appender.isStarted)
+            assertFalse(Files.exists(logFile, LinkOption.NOFOLLOW_LINKS))
+            assertFalse(Files.exists(world.home, LinkOption.NOFOLLOW_LINKS))
+            assertRealHomeUnchanged(existed)
+        } finally {
+            logger.detachAppender(appender)
+            appender.stop()
+        }
+    }
+
+    @Test
+    fun installCancelsTheScheduledHomeCacheDeletion() {
+        val parent = Files.createTempDirectory("robotmc-reinstall")
+        val home = parent.resolve(".robotmc-installer")
+        Files.createDirectories(home)
+        assertStandIn(home)
+        val existed = realHomeExisted()
+        Files.writeString(home.resolve("marker.txt"), "keep")
+        val minecraft = parent.resolve("minecraft")
+        Files.createDirectories(minecraft)
+        Files.writeString(minecraft.resolve("launcher_profiles.json"), """{"profiles":{}}""")
+        writeLoaderVersionAlias(minecraft, "neoforge-21.11.6-beta")
+        val jar = sleepingJar(home.resolve("hold.jar"), parent.resolve("classes"))
+        val child = startJar(jar)
+        val errors = parent.resolve("janitor.err")
+        try {
+            Thread.sleep(150)
+            assertTrue(child.isAlive)
+            spawnDetachedHomeCacheJanitor(home, child.pid(), errors)
+            val service = service(minecraft, home)
+            service.installerDirectory = home
+            val decision = decideModLoaderInstall(
+                type = ModLoaderType.NEO_FORGE,
+                loaderVersion = "21.11.6-beta",
+                minecraftVersion = "1.21.11",
+                minecraftDirectory = minecraft,
+                installOptions = emptyList(),
+                profiles = LauncherProfilesJson(profiles = emptyMap()),
+                installerDirectory = home,
+                aliasInheritsFrom = "neoforge-21.11.6-beta",
+            )
+            Files.write(decision.installerJar, byteArrayOf(9, 9, 9))
+            service.install()
+            child.destroyForcibly()
+            assertTrue(child.waitFor(10, java.util.concurrent.TimeUnit.SECONDS))
+            val until = System.nanoTime() + 2_000_000_000L
+            while (System.nanoTime() < until) {
+                assertEquals("keep", Files.readString(home.resolve("marker.txt")), janitorErrors(errors))
+                Thread.sleep(50)
+            }
+            assertRealHomeUnchanged(existed)
+        } finally {
+            child.destroyForcibly()
+        }
+    }
+
+    @Test
+    fun windowsJanitorDoesNotUseTheAutomaticHomeVariable() {
+        val script = javaClass.classLoader.getResourceAsStream("home-cache-janitor.ps1")!!
+            .bufferedReader()
+            .use { it.readText() }
+        assertFalse(Regex("(?i)\\${'$'}Home\\b").containsMatchIn(script))
+        assertTrue(script.contains("${'$'}CacheDirectory"))
+        val command = windowsHomeCacheJanitorCommand(
+            "powershell.exe",
+            Path.of("home-cache-janitor.ps1"),
+            10,
+            Path.of("cache"),
+            Path.of("cancel"),
+        )
+        assertTrue(command.contains("-CacheDirectory"))
+        assertTrue(command.contains("-CancelFile"))
+        assertFalse(command.contains("-Home"))
     }
 
     @Test

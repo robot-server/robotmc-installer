@@ -4,6 +4,7 @@ import com.sysbot32.robotmc.installer.InstallService
 import com.sysbot32.robotmc.installer.config.InstallerProperties
 import com.sysbot32.robotmc.installer.launcher.LauncherService
 import com.sysbot32.robotmc.installer.config.launcherVersionId
+import com.sysbot32.robotmc.installer.launcher.cancelPendingInstallerHomeCacheJanitor
 import com.sysbot32.robotmc.installer.launcher.defaultInstallerHome
 import com.sysbot32.robotmc.installer.launcher.deleteGameDirectory
 import com.sysbot32.robotmc.installer.launcher.deleteVersionAlias
@@ -87,6 +88,8 @@ class ModLoaderInstallService(
         get() = 10
 
     override fun install() {
+        // 제거가 예약해 둔 종료 후 삭제가 이번 설치가 만든 캐시까지 지우지 않게 한다.
+        cancelPendingInstallerHomeCacheJanitor()
         val loader = this.installerProperties.mod?.loader
         log.info { "Minecraft ${this.installerProperties.minecraft.version}" }
         log.info { "${loader?.type?.displayName} ${loader?.version}" }

@@ -1,8 +1,11 @@
 package com.sysbot32.robotmc.installer.launcher
 
+import ch.qos.logback.classic.LoggerContext
+import ch.qos.logback.core.FileAppender
 import com.sysbot32.robotmc.installer.exception.UserException
 import com.sysbot32.robotmc.installer.prelaunch.installerLaunchCommand
 import io.github.oshai.kotlinlogging.KotlinLogging
+import org.slf4j.LoggerFactory
 import java.io.IOException
 import java.nio.file.Files
 import java.nio.file.InvalidPathException
@@ -10,8 +13,12 @@ import java.nio.file.LinkOption
 import java.nio.file.Path
 import java.nio.file.attribute.BasicFileAttributes
 import java.nio.file.attribute.DosFileAttributeView
+import java.util.concurrent.atomic.AtomicBoolean
 
 private val log = KotlinLogging.logger { }
+
+private val pendingHomeCacheCancels = mutableListOf<Path>()
+private val pendingInProcessCleanups = mutableListOf<AtomicBoolean>()
 
 const val INSTALLER_HOME_DIRECTORY_NAME = ".robotmc-installer"
 
@@ -72,11 +79,35 @@ fun removeInstallerHomeCache(
 fun deleteInstallerHomeCache(home: Path) {
     val root = home.toAbsolutePath().normalize()
     refuseUserHome(root)
+    // Windows는 열린 로그를 FILE_SHARE_DELETE 없이 잡는다. 닫기 전에는 캐시 삭제가 실패한다.
+    releaseLogFilesInside(root)
     try {
         deleteTree(root)
     } catch (exception: IOException) {
         throw UserException("삭제하지 못했어요: $root", exception)
     }
+}
+
+/**
+ * 설치가 같은 프로세스에서 캐시를 다시 만들기 전에 호출한다.
+ * 이미 예약된 종료 후 삭제는 그 캐시까지 지우므로 취소한다.
+ */
+fun cancelPendingInstallerHomeCacheJanitor() {
+    val cancels = synchronized(pendingHomeCacheCancels) {
+        pendingHomeCacheCancels.toList().also { pendingHomeCacheCancels.clear() }
+    }
+    for (cancel in cancels) {
+        try {
+            cancel.parent?.let { Files.createDirectories(it) }
+            Files.writeString(cancel, "cancel\n")
+        } catch (exception: IOException) {
+            log.warn(exception) { "홈 캐시 정리를 취소하지 못했어요: $cancel" }
+        }
+    }
+    val flags = synchronized(pendingInProcessCleanups) {
+        pendingInProcessCleanups.toList().also { pendingInProcessCleanups.clear() }
+    }
+    flags.forEach { it.set(true) }
 }
 
 private fun deleteHomeCacheAfterExit(home: Path, pid: Long) {
@@ -92,9 +123,14 @@ private fun deleteHomeCacheAfterExit(home: Path, pid: Long) {
         return
     }
     log.info { "홈 캐시는 프로세스 $pid 가 끝난 뒤에 지워요: $home" }
+    val cancelled = AtomicBoolean(false)
+    synchronized(pendingInProcessCleanups) { pendingInProcessCleanups.add(cancelled) }
     Thread({
         try {
             handle.onExit().join()
+            if (cancelled.get()) {
+                return@Thread
+            }
             if (!handle.isAlive) {
                 deleteInstallerHomeCache(home)
             }
@@ -121,22 +157,11 @@ internal fun spawnDetachedHomeCacheJanitor(home: Path, pid: Long, errorLog: Path
     if (!windows) {
         script.toFile().setExecutable(true)
     }
+    val cancel = work.resolve("cancel")
     val command = if (windows) {
-        listOf(
-            powershellExecutable(),
-            "-NoProfile",
-            "-NonInteractive",
-            "-ExecutionPolicy",
-            "Bypass",
-            "-File",
-            script.toString(),
-            "-WaitPid",
-            pid.toString(),
-            "-Home",
-            root.toString(),
-        )
+        windowsHomeCacheJanitorCommand(powershellExecutable(), script, pid, root, cancel)
     } else {
-        listOf(nohupExecutable(), script.toString(), pid.toString(), root.toString())
+        listOf(nohupExecutable(), script.toString(), pid.toString(), root.toString(), cancel.toString())
     }
     try {
         val process = ProcessBuilder(command).directory(work.toFile())
@@ -149,9 +174,34 @@ internal fun spawnDetachedHomeCacheJanitor(home: Path, pid: Long, errorLog: Path
             process.redirectOutput(errorLog.toFile())
         }
         process.start()
+        synchronized(pendingHomeCacheCancels) { pendingHomeCacheCancels.add(cancel) }
     } catch (exception: IOException) {
         throw UserException("홈 캐시를 나중에 지우지 못해요.", exception)
     }
+}
+
+internal fun windowsHomeCacheJanitorCommand(
+    powershell: String,
+    script: Path,
+    pid: Long,
+    home: Path,
+    cancel: Path,
+): List<String> {
+    return listOf(
+        powershell,
+        "-NoProfile",
+        "-NonInteractive",
+        "-ExecutionPolicy",
+        "Bypass",
+        "-File",
+        script.toString(),
+        "-WaitPid",
+        pid.toString(),
+        "-CacheDirectory",
+        home.toString(),
+        "-CancelFile",
+        cancel.toString(),
+    )
 }
 
 private fun janitorDirectory(home: Path): Path {
@@ -235,6 +285,26 @@ private fun clearDosReadOnly(path: Path) {
         ?: return
     if (dos.readAttributes().isReadOnly) {
         dos.setReadOnly(false)
+    }
+}
+
+private fun releaseLogFilesInside(home: Path) {
+    val context = LoggerFactory.getILoggerFactory() as? LoggerContext ?: return
+    for (logger in context.loggerList) {
+        for (appender in logger.iteratorForAppenders()) {
+            if (appender !is FileAppender<*>) {
+                continue
+            }
+            val file = appender.file ?: continue
+            val path = try {
+                Path.of(file)
+            } catch (_: InvalidPathException) {
+                continue
+            }
+            if (pathIsInside(home, path)) {
+                appender.stop()
+            }
+        }
     }
 }
 

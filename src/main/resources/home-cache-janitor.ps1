@@ -2,14 +2,16 @@ param(
     [Parameter(Mandatory = $true)]
     [long] $WaitPid,
     [Parameter(Mandatory = $true)]
-    [string] $Home
+    [string] $CacheDirectory,
+    [Parameter(Mandatory = $true)]
+    [string] $CancelFile
 )
 
-$name = Split-Path -Leaf $Home
+$name = Split-Path -Leaf $CacheDirectory
 if ($name -ne '.robotmc-installer') {
     exit 1
 }
-$resolved = [System.IO.Path]::GetFullPath($Home)
+$resolved = [System.IO.Path]::GetFullPath($CacheDirectory)
 $user = [System.IO.Path]::GetFullPath($env:USERPROFILE)
 if ($resolved -eq $user -or $resolved -eq [System.IO.Path]::GetPathRoot($resolved)) {
     exit 1
@@ -20,6 +22,9 @@ try {
 } catch {
 }
 Start-Sleep -Milliseconds 300
+if (Test-Path -LiteralPath $CancelFile) {
+    exit 0
+}
 
 function Clear-ReadOnly([System.IO.FileSystemInfo] $Item) {
     try { $Item.IsReadOnly = $false } catch {}
@@ -77,4 +82,4 @@ function Remove-Cache([string] $Path) {
     }
 }
 
-Remove-Cache $Home
+Remove-Cache $CacheDirectory
