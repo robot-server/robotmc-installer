@@ -14,6 +14,7 @@ import org.springframework.http.client.ClientHttpRequest
 import org.springframework.http.client.ClientHttpRequestFactory
 import org.springframework.http.converter.json.Jackson2ObjectMapperBuilder
 import org.springframework.web.client.RestClient
+import java.io.IOException
 import java.net.URI
 import java.nio.file.Files
 import java.nio.file.LinkOption
@@ -311,7 +312,11 @@ class HomeCacheUninstallTest {
         readonly.toFile().setReadOnly()
         val dos = Files.getFileAttributeView(readonly, DosFileAttributeView::class.java, LinkOption.NOFOLLOW_LINKS)
         if (dos != null && !dos.readAttributes().isReadOnly) {
-            dos.setReadOnly(true)
+            try {
+                dos.setReadOnly(true)
+            } catch (_: IOException) {
+                // Ubuntu CI는 user.DOSATTRIB 쓰기를 거절한다. POSIX 읽기 전용은 위에서 켜 두었다.
+            }
         }
         Files.createDirectories(linkTarget)
         Files.writeString(linkTarget.resolve("keep.txt"), "target")
