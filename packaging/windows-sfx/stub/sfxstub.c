@@ -36,6 +36,8 @@ Launch name: RobotMC Installer.exe
 static const ISzAlloc g_Alloc = { SzAlloc, SzFree };
 static volatile LONG g_Cancel = 0;
 static volatile LONG g_ExtractOk = 0;
+static volatile LONG g_ErrorPending = 0;
+static wchar_t g_ErrorText[1024];
 static volatile LONGLONG g_BytesRead = 0;
 static volatile LONGLONG g_ArchiveBytes = 0;
 static HWND g_ExtractWindow = NULL;
@@ -51,10 +53,32 @@ typedef struct
   UInt64 size;
 } COverlayStream;
 
+static void ShowErrorBox(const wchar_t *message)
+{
+  wchar_t box[1400];
+  swprintf(box, 1400, L"%ls\n\n%ls", SFX_FAIL_TITLE, message);
+  MessageBoxW(NULL, box, L"RobotMC Installer", MB_OK | MB_ICONERROR | MB_SETFOREGROUND);
+}
+
+static void RememberError(const wchar_t *message)
+{
+  if (g_ErrorPending)
+    return;
+  lstrcpynW(g_ErrorText, message, 1024);
+  g_ErrorPending = 1;
+}
+
+static void ShowRememberedError(void)
+{
+  if (!g_ErrorPending || g_Cancel)
+    return;
+  g_ErrorPending = 0;
+  ShowErrorBox(g_ErrorText);
+}
+
 static void Report(const wchar_t *message)
 {
   wchar_t logPath[SFX_PATH_CAP];
-  wchar_t box[1400];
   DWORD logLen = GetEnvironmentVariableW(L"ROBOTMC_SFX_LOG", logPath, SFX_PATH_CAP);
   int logged = 0;
   int console = 0;
@@ -89,8 +113,11 @@ static void Report(const wchar_t *message)
   }
   if (!logged && !console)
   {
-    swprintf(box, 1400, L"%ls\n\n%ls", SFX_FAIL_TITLE, message);
-    MessageBoxW(NULL, box, L"RobotMC Installer", MB_OK | MB_ICONERROR);
+    /* 진행 창이 떠 있는 동안 띄우면 그 뒤에 가려진다. 창을 닫은 뒤에 보여 준다. */
+    if (g_ExtractWindow)
+      RememberError(message);
+    else
+      ShowErrorBox(message);
   }
 }
 
@@ -723,6 +750,7 @@ static int SfxMain(void)
     job.result = 0;
     g_Cancel = 0;
     g_ExtractOk = 0;
+    g_ErrorPending = 0;
     g_BytesRead = 0;
     g_ArchiveBytes = (LONGLONG)overlay.size;
     ShowExtractWindow();
@@ -740,7 +768,10 @@ static int SfxMain(void)
     if (doneEvent)
       CloseHandle(doneEvent);
     if (job.result != 1)
+    {
+      ShowRememberedError();
       goto done;
+    }
   }
   if (!LaunchInstaller(installDir, &exitCode))
     goto done;
