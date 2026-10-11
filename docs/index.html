@@ -144,7 +144,7 @@
 
       function showCommand(name) {
         if (!command) return;
-        command.textContent = name ? "java -jar " + name : "실행 명령을 불러오지 못했어요.";
+        command.textContent = name ? "java -jar " + name : "java -jar robotmc-installer-<버전>.jar";
       }
 
       function fallbackJarName(tag) {
