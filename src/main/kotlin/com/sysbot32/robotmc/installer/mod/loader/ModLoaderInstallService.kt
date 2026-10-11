@@ -4,9 +4,12 @@ import com.sysbot32.robotmc.installer.InstallService
 import com.sysbot32.robotmc.installer.config.InstallerProperties
 import com.sysbot32.robotmc.installer.launcher.LauncherService
 import com.sysbot32.robotmc.installer.config.launcherVersionId
+import com.sysbot32.robotmc.installer.launcher.defaultInstallerHome
 import com.sysbot32.robotmc.installer.launcher.deleteGameDirectory
 import com.sysbot32.robotmc.installer.launcher.deleteVersionAlias
 import com.sysbot32.robotmc.installer.launcher.readLoaderVersionAliasInherits
+import com.sysbot32.robotmc.installer.launcher.removeInstallerHomeCache
+import com.sysbot32.robotmc.installer.launcher.runningInstallerFile
 import com.sysbot32.robotmc.installer.launcher.writeLoaderVersionAlias
 import com.sysbot32.robotmc.installer.progress.ProgressService
 import io.github.oshai.kotlinlogging.KotlinLogging
@@ -69,6 +72,17 @@ class ModLoaderInstallService(
      */
     internal var installerDirectory: Path = defaultModLoaderInstallerDirectory()
 
+    /**
+     * 제거가 끝난 뒤에 지울 홈 캐시. 기본값은 ~/.robotmc-installer 이고, 테스트는 임시 디렉터리를 넣는다.
+     */
+    internal var homeCacheDirectory: Path = defaultInstallerHome()
+
+    /** 이 프로세스가 떠 있는 파일. 테스트는 홈 캐시 안에서 띄운 자식의 JAR 을 넣는다. */
+    internal var homeCacheRunningFile: () -> Path? = { runningInstallerFile() }
+
+    /** [homeCacheRunningFile] 이 홈 캐시 안에 있는 동안 지우지 않을 프로세스. */
+    internal var homeCacheWaitPid: () -> Long = { ProcessHandle.current().pid() }
+
     override val order: Int
         get() = 10
 
@@ -128,6 +142,12 @@ class ModLoaderInstallService(
             )
         }
         deleteGameDirectory(minecraft, this.installerProperties.gameDirectoryName)
+        // 프로필, 별칭, 게임 폴더가 모두 지워진 뒤에만 홈 캐시를 지운다. 설치는 호출하지 않는다.
+        removeInstallerHomeCache(
+            this.homeCacheDirectory,
+            this.homeCacheRunningFile(),
+            this.homeCacheWaitPid(),
+        )
         this.progressService.step(-2)
     }
 }
