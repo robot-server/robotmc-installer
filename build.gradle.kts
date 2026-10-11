@@ -206,19 +206,17 @@ tasks.register("packageInstallerAppImage") {
 }
 
 // test에 붙이지 않는다. 이미지를 만들면 단위 테스트가 느려진다.
-// Windows 러너에서만 의미 있다. jpackage는 호스트 OS 이미지만 만들고, 수정 SFX 모듈이 InstallPath를 유지한다.
+// Windows 러너에서만 의미 있다. jpackage는 호스트 OS 이미지만 만들고, 우리 스텁이 설치 폴더를 남긴다.
 tasks.register("packageWindowsSfx") {
     group = "distribution"
-    description = "Windows 앱 이미지를 7-Zip SFX exe 하나로 묶는다."
+    description = "Windows 앱 이미지를 우리 SFX 스텁과 7z로 묶는다."
     dependsOn("packageInstallerAppImage")
-    val config = WindowsSfxPack.configFile(project.projectDir)
-    val licenseNotice = WindowsSfxPack.licenseNoticeFile(project.projectDir)
-    val sfxModule = providers.gradleProperty("sfxModule")
-    inputs.file(config)
-    inputs.file(licenseNotice)
+    val icon = InstallerAppIcon.fileFor("windows", project.projectDir)
+    inputs.file(icon)
+    inputs.file(WindowsSfxPack.stubSource(project.projectDir))
+    inputs.dir(WindowsSfxPack.lzmaSdkDir(project.projectDir))
     inputs.dir(installerAppImageDir)
     inputs.property("version", providers.provider { project.version.toString() })
-    sfxModule.orNull?.let { inputs.file(File(it)) }
     val output = layout.buildDirectory.file(
         "${WindowsSfxPack.OUTPUT_DIR}/robotmc-installer-${project.version}.exe",
     )
@@ -228,18 +226,17 @@ tasks.register("packageWindowsSfx") {
             throw org.gradle.api.GradleException("packageWindowsSfx는 Windows에서만 앱 이미지를 묶는다.")
         }
         val sevenZip = WindowsSfxPack.findSevenZip()
-        val module = sfxModule.orNull?.let { File(it) }
-            ?: WindowsSfxPack.downloadModule(
-                layout.buildDirectory.dir("${WindowsSfxPack.OUTPUT_DIR}/module").get().asFile,
-                sevenZip,
-            )
+        val stub = WindowsSfxPack.compileStub(
+            projectDir = project.projectDir,
+            iconFile = icon,
+            workDir = layout.buildDirectory.dir("${WindowsSfxPack.OUTPUT_DIR}/stub-work").get().asFile,
+            destination = layout.buildDirectory.file("${WindowsSfxPack.OUTPUT_DIR}/stub.exe").get().asFile,
+        )
         WindowsSfxPack.pack(
             imageDir = installerImagePaths(installerAppImageDir.get().asFile).image,
-            configFile = config,
-            moduleFile = module,
+            stubFile = stub,
             sevenZip = sevenZip,
             destination = output.get().asFile,
-            licenseNotice = licenseNotice,
         )
     }
 }
@@ -282,6 +279,45 @@ tasks.register("checkInstallerAppImage") {
     }
 }
 
+fun deleteExistingDirectory(directory: File, failure: String) {
+    if (!directory.exists()) {
+        return
+    }
+    val deadline = System.nanoTime() + 15_000_000_000L
+    var remaining: File? = null
+    while (true) {
+        remaining = deleteTree(directory)
+        if (!directory.exists()) {
+            return
+        }
+        if (System.nanoTime() >= deadline) {
+            break
+        }
+        Thread.sleep(300)
+    }
+    val stuck = remaining?.absolutePath ?: directory.absolutePath
+    throw org.gradle.api.GradleException(
+        "$failure: ${directory.absolutePath}\n지우지 못한 항목: $stuck\n이 파일을 연 프로그램이 있으면 닫고 다시 실행합니다.",
+    )
+}
+
+fun deleteTree(directory: File): File? {
+    if (!directory.exists()) {
+        return null
+    }
+    var problem: File? = null
+    for (file in directory.walkBottomUp()) {
+        if (!file.exists()) {
+            continue
+        }
+        file.setWritable(true)
+        if (!file.delete() && file.exists()) {
+            problem = problem ?: file
+        }
+    }
+    return if (directory.exists()) problem ?: directory else null
+}
+
 fun buildInstallerAppImage(
     jdkHome: File,
     copiedJar: File,
@@ -296,12 +332,8 @@ fun buildInstallerAppImage(
     if (mainClass != bootJarMainClass) {
         throw org.gradle.api.GradleException("앱 이미지에 넣은 jar의 Main-Class가 $bootJarMainClass 이 아닙니다: $mainClass")
     }
-    if (destination.exists() && !destination.deleteRecursively()) {
-        throw org.gradle.api.GradleException("이전 앱 이미지를 지우지 못했습니다: ${destination.absolutePath}")
-    }
-    if (work.exists() && !work.deleteRecursively()) {
-        throw org.gradle.api.GradleException("작업 디렉터리를 지우지 못했습니다: ${work.absolutePath}")
-    }
+    deleteExistingDirectory(destination, "이전 앱 이미지를 지우지 못했습니다")
+    deleteExistingDirectory(work, "작업 디렉터리를 지우지 못했습니다")
     val input = File(work, "input")
     val runtime = File(work, "runtime")
     if (!input.mkdirs() || !destination.mkdirs()) {

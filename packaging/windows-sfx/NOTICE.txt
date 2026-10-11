@@ -1,14 +1,9 @@
-RobotMC Installer Windows SFX에 붙는 스텁은 7-Zip 수정 SFX 모듈입니다.
-설치기 애플리케이션과 포함 JDK는 이 스텁과 링크하지 않은 별도 프로그램이며, 스텁이 푸는 데이터입니다.
+RobotMC Installer Windows 실행 파일의 앞부분은 이 저장소의 스텁입니다.
+스텁은 뒤에 붙은 7z를 풀어 %LOCALAPPDATA%\RobotMC Installer 에 두고 RobotMC Installer.exe 를 실행합니다. 푼 파일은 그대로 둡니다.
 
-스텁 저작권: Igor Pavlov, Oleg Scherbakov
-라이선스: GNU Lesser General Public License 2.1 이상
-https://www.gnu.org/licenses/old-licenses/lgpl-2.1.html
+7z를 푸는 코드는 Igor Pavlov의 LZMA SDK이며, 퍼블릭 도메인입니다.
+출처와 라이선스 원문: packaging/windows-sfx/lzma-sdk/DOC/lzma-sdk.txt
+https://www.7-zip.org/sdk.html
 
-모듈 바이너리:
-https://github.com/OlegScherbakov/7zSFX/raw/01ed0bf2003ae80cdc5e37e893053d151478c812/files/7zsd_extra_170_3900.7z
-
-모듈 소스:
-https://github.com/OlegScherbakov/7zSFX/raw/3606ffa5f4b3ab4bae02bef11f0467b4131b1ae8/files/7zsd_src_170_3900.7z
-
-이 바이너리는 저장소에 커밋하지 않습니다. packageWindowsSfx가 위 주소에서 받아 SHA-256을 확인한 뒤 exe 앞에 붙입니다.
+이 스텁은 7-Zip SFX 모듈이 아닙니다. 수정 SFX 모듈 바이너리를 받거나 재배포하지 않습니다.
+설치기 애플리케이션과 포함 JDK는 스텁과 링크하지 않은 별도 프로그램이며, 스텁이 푸는 데이터입니다.
