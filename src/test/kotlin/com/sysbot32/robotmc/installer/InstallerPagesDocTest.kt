@@ -32,8 +32,7 @@ class InstallerPagesDocTest {
         assertFalse(text.contains("모드 로더"))
         assertFalse(text.contains("NeoForge"))
         assertFalse(text.contains("Fabric"))
-        assertFalse(text.contains("macOS"))
-        assertFalse(text.contains("Linux"))
+        assertFalse(text.contains("Windows, macOS, Linux에서 쓸 수 있어요."))
         assertFalse(Regex("""\d+\.\d+\.\d+""").containsMatchIn(text))
         assertFalse(text.contains("releases/download/"))
 
@@ -54,7 +53,9 @@ class InstallerPagesDocTest {
         assertTrue(text.contains("Smart App Control을 꺼 주세요"))
         assertTrue(text.contains("Java $javaMajor JRE"))
         assertTrue(text.contains("package=jre"))
-        assertTrue(text.contains("java -jar"))
+        assertTrue(text.contains("이 명령으로 실행해요."))
+        assertTrue(text.contains(""""java -jar " + asset.name"""))
+        assertFalse(text.contains("뒤에 받은 파일 이름"))
 
         val payloads = docs.walkTopDown()
             .filter { file ->
