@@ -59,6 +59,26 @@ class HomeCacheUninstallTest {
     }
 
     @Test
+    fun finishedUninstallRemovesAJunctionWithoutItsTarget() {
+        val world = world()
+        val existed = realHomeExisted()
+        seedHome(world.home, world.linkTarget)
+        val junctionTarget = createWindowsJunction(world.home, world.root)
+        val record = gameDirectory(world.minecraft).resolve(".robotmc-installer").resolve("installed.txt")
+        prepareRemovedInstall(world.minecraft, record)
+        val service = service(world.minecraft, world.home)
+        service.homeCacheRunningFile = { null }
+
+        service.uninstall()
+
+        assertHomeGone(world.home)
+        assertEquals("target", Files.readString(world.linkTarget.resolve("keep.txt")))
+        assertJunctionTarget(junctionTarget)
+        assertFalse(Files.exists(record, LinkOption.NOFOLLOW_LINKS))
+        assertRealHomeUnchanged(existed)
+    }
+
+    @Test
     fun finishedUninstallSucceedsWhenTheHomeCacheIsAlreadyGone() {
         val world = world()
         val existed = realHomeExisted()

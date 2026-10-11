@@ -8,6 +8,7 @@ import java.nio.file.Files
 import java.nio.file.InvalidPathException
 import java.nio.file.LinkOption
 import java.nio.file.Path
+import java.nio.file.attribute.BasicFileAttributes
 import java.nio.file.attribute.DosFileAttributeView
 
 private val log = KotlinLogging.logger { }
@@ -190,7 +191,8 @@ private fun powershellExecutable(): String {
 }
 
 private fun deleteTree(path: Path) {
-    if (Files.isSymbolicLink(path)) {
+    // junction은 심볼릭 링크가 아니다. 디렉터리로 열면 바깥 대상의 파일이 지워진다.
+    if (isReparsePoint(path)) {
         clearDosReadOnly(path)
         Files.deleteIfExists(path)
         return
@@ -202,7 +204,7 @@ private fun deleteTree(path: Path) {
         val directory = path.toAbsolutePath().normalize()
         val children = Files.newDirectoryStream(path).use { stream -> stream.toList() }
         for (child in children) {
-            if (!Files.isSymbolicLink(child) && child.toAbsolutePath().normalize().parent != directory) {
+            if (!isReparsePoint(child) && child.toAbsolutePath().normalize().parent != directory) {
                 continue
             }
             deleteTree(child)
@@ -210,6 +212,18 @@ private fun deleteTree(path: Path) {
     }
     clearDosReadOnly(path)
     Files.deleteIfExists(path)
+}
+
+/**
+ * NOFOLLOW로 읽은 심볼릭 링크이거나, junction 같은 재분석 지점(isOther)이면 true.
+ */
+private fun isReparsePoint(path: Path): Boolean {
+    return try {
+        val attributes = Files.readAttributes(path, BasicFileAttributes::class.java, LinkOption.NOFOLLOW_LINKS)
+        attributes.isSymbolicLink || attributes.isOther
+    } catch (_: IOException) {
+        false
+    }
 }
 
 /**
