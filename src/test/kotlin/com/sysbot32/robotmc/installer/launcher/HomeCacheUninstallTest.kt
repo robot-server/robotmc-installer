@@ -416,7 +416,8 @@ class HomeCacheUninstallTest {
         Files.write(home.resolve("replace/installer-replace.jar"), byteArrayOf(6))
         val readonly = home.resolve("readonly.txt")
         Files.writeString(readonly, "locked")
-        readonly.toFile().setReadOnly()
+        // Linux에도 DosFileAttributeView가 있다. setReadOnly는 xattr를 쓰므로
+        // 유닉스 쓰기 비트를 끄기 전에 먼저 해야 AccessDenied가 나지 않는다.
         val dos = Files.getFileAttributeView(readonly, DosFileAttributeView::class.java, LinkOption.NOFOLLOW_LINKS)
         if (dos != null && !dos.readAttributes().isReadOnly) {
             try {
@@ -425,6 +426,7 @@ class HomeCacheUninstallTest {
                 // Ubuntu CI는 user.DOSATTRIB 쓰기를 거절한다. POSIX 읽기 전용은 위에서 켜 두었다.
             }
         }
+        readonly.toFile().setReadOnly()
         Files.createDirectories(linkTarget)
         Files.writeString(linkTarget.resolve("keep.txt"), "target")
         Files.createSymbolicLink(home.resolve("outside-link"), linkTarget)

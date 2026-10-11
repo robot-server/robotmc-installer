@@ -279,12 +279,27 @@ private fun isReparsePoint(path: Path): Boolean {
 /**
  * JDK 25의 jpackage는 Windows 런처에 읽기 전용 속성을 붙인다.
  * 그 비트가 남아 있으면 DeleteFile이 거부한다.
+ * Linux에서도 DosFileAttributeView가 있고, 유닉스 쓰기 비트가 꺼져 있으면
+ * 삭제가 AccessDenied가 나므로 일반 파일은 쓰기 권한도 되돌린다.
+ * 심볼릭 링크와 junction에는 File.setWritable를 쓰지 않는다. 대상을 따라간다.
  */
 private fun clearDosReadOnly(path: Path) {
+    val attributes = try {
+        Files.readAttributes(path, BasicFileAttributes::class.java, LinkOption.NOFOLLOW_LINKS)
+    } catch (_: IOException) {
+        return
+    }
+    if (attributes.isSymbolicLink) {
+        return
+    }
     val dos = Files.getFileAttributeView(path, DosFileAttributeView::class.java, LinkOption.NOFOLLOW_LINKS)
-        ?: return
-    if (dos.readAttributes().isReadOnly) {
+    if (dos != null && dos.readAttributes().isReadOnly) {
+        if (!attributes.isOther) {
+            path.toFile().setWritable(true)
+        }
         dos.setReadOnly(false)
+    } else if (!attributes.isOther && !path.toFile().canWrite()) {
+        path.toFile().setWritable(true)
     }
 }
 
