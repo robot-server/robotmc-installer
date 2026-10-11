@@ -20,9 +20,9 @@ class InstallerInfoTest {
                 SettingsRow("Minecraft", "1.21.11"),
                 SettingsRow("폴더", Paths.get("/tmp/minecraft").toString()),
                 SettingsRow("모드 로더", "NeoForge 21.11.6-beta"),
-                SettingsRow("모드", "iris.jar"),
-                SettingsRow("서버", "Robot Server (minecraft.o-r.cc)"),
-                SettingsRow("리소스 팩", "Faithful.zip"),
+                SettingsRow("모드", "sample.jar"),
+                SettingsRow("서버", "Example (play.example)"),
+                SettingsRow("리소스 팩", "Pack.zip"),
             ),
             properties.settingsRows(),
         )
@@ -47,17 +47,17 @@ class InstallerInfoTest {
         assertEquals(
             listOf(
                 PlanSection("모드 로더", listOf("NeoForge 21.11.6-beta")),
-                PlanSection("모드", listOf("iris.jar")),
-                PlanSection("서버", listOf("Robot Server (minecraft.o-r.cc)")),
-                PlanSection("리소스 팩", listOf("Faithful.zip")),
+                PlanSection("모드", listOf("sample.jar")),
+                PlanSection("서버", listOf("Example (play.example)")),
+                PlanSection("리소스 팩", listOf("Pack.zip")),
             ),
             properties.plan(InstallerProperties.Mode.INSTALL),
         )
         assertEquals(
             listOf(
                 PlanSection("모드 로더", listOf("NeoForge 21.11.6-beta")),
-                PlanSection("모드", listOf("iris.jar")),
-                PlanSection("리소스 팩", listOf("Faithful.zip")),
+                PlanSection("모드", listOf("sample.jar")),
+                PlanSection("리소스 팩", listOf("Pack.zip")),
             ),
             properties.plan(InstallerProperties.Mode.UNINSTALL),
         )
@@ -77,12 +77,12 @@ class InstallerInfoTest {
                     version = "21.11.6-beta",
                 ),
                 mods = listOf(
-                    InstallerProperties.Mod.Mod("https://example/iris.jar"),
+                    InstallerProperties.Mod.Mod("https://example/sample.jar"),
                 ),
             ),
-            servers = listOf(ServersDat.Server(ip = "minecraft.o-r.cc", name = "Robot Server")),
+            servers = listOf(ServersDat.Server(ip = "play.example", name = "Example")),
             resourcePacks = listOf(
-                InstallerProperties.ResourcePack("https://example/packs/Faithful.zip"),
+                InstallerProperties.ResourcePack("https://example/packs/Pack.zip"),
             ),
         )
     }

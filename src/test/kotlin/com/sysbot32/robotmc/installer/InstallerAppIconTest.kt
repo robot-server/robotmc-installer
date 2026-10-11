@@ -3,7 +3,6 @@ package com.sysbot32.robotmc.installer
 import androidx.compose.ui.graphics.toAwtImage
 import androidx.compose.ui.unit.Density
 import androidx.compose.ui.unit.LayoutDirection
-import com.sysbot32.robotmc.installer.config.DEFAULT_PROFILE_ICON
 import com.sysbot32.robotmc.installer.gui.installInstallerTaskbarIcon
 import com.sysbot32.robotmc.installer.gui.installerTaskbarIconSupported
 import com.sysbot32.robotmc.installer.gui.installerWindowIconImage
@@ -88,7 +87,7 @@ class InstallerAppIconTest {
     }
 
     @Test
-    fun fourWindowsPassThatIconAndTheProfileIconStaysRedstone() {
+    fun fourWindowsPassThatIconAndTheProfileIconStaysSeparate() {
         val root = projectRoot()
         val window = File(root, "src/main/kotlin/com/sysbot32/robotmc/installer/gui/InstallerWindow.kt").readText()
         val calls = Regex("""(?m)^    (?:Window|DialogWindow)\(""").findAll(window).toList()
@@ -100,8 +99,11 @@ class InstallerAppIconTest {
         assertEquals(2, Regex("""installerWindowIcon\(\)""").findAll(window).count())
 
         val yml = File(root, "src/main/resources/application.yml").readText()
-        assertTrue(Regex("""(?m)^  profile-icon: Redstone_Block\s*$""").containsMatchIn(yml))
-        assertEquals("Redstone_Block", DEFAULT_PROFILE_ICON)
+        val profileIcon = Regex("""(?m)^  profile-icon: (\S+)\s*$""").find(yml)?.groupValues?.get(1)
+        if (profileIcon != null) {
+            assertTrue(!profileIcon.contains("installer-app-icon"), profileIcon)
+            assertTrue(!profileIcon.contains('/'), profileIcon)
+        }
         val profileTest = File(root, "src/test/kotlin/com/sysbot32/robotmc/installer/launcher/RobotMcProfileTest.kt").readText()
         assertTrue(!profileTest.contains("installer-app-icon"))
     }

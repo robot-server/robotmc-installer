@@ -4,7 +4,6 @@ import com.fasterxml.jackson.databind.JsonNode
 import com.fasterxml.jackson.databind.ObjectMapper
 import com.fasterxml.jackson.databind.node.ObjectNode
 import com.sysbot32.robotmc.installer.config.DEFAULT_GAME_DIRECTORY_NAME
-import com.sysbot32.robotmc.installer.config.DEFAULT_PROFILE_ICON
 import com.sysbot32.robotmc.installer.config.DEFAULT_PROFILE_KEY
 import com.sysbot32.robotmc.installer.config.DEFAULT_VERSION_ID
 import com.sysbot32.robotmc.installer.config.InstallerProperties
@@ -95,7 +94,7 @@ class RobotMcProfileTest {
         assertEquals("RobotMC", ours.get("name").asText())
         assertEquals(DEFAULT_VERSION_ID, ours.get("lastVersionId").asText())
         assertEquals(gameDirectory(minecraft).toString(), ours.get("gameDir").asText())
-        assertEquals(DEFAULT_PROFILE_ICON, ours.get("icon").asText())
+        assertEquals("Grass", ours.get("icon").asText())
         assertEquals("2020-01-01T00:00:00Z", ours.get("created").asText())
         val tokens = tokenizeJavaArgs(ours.get("javaArgs").asText())
         assertEquals(listOf("-Xmx2G"), tokens.filterNot { isJavaAgentToken(it) })
@@ -467,7 +466,7 @@ class RobotMcProfileTest {
         assertEquals(expectedProfileName, robotmc.get("name").asText())
         assertEquals(DEFAULT_VERSION_ID, robotmc.get("lastVersionId").asText())
         assertEquals("custom", robotmc.get("type").asText())
-        assertEquals(DEFAULT_PROFILE_ICON, robotmc.get("icon").asText())
+        assertTrue(robotmc.get("icon") == null)
         assertTrue(robotmc.get("created").isTextual)
         val gameDir = Path.of(robotmc.get("gameDir").textValue())
         assertEquals(expectedGameDir(minecraft), gameDir)
