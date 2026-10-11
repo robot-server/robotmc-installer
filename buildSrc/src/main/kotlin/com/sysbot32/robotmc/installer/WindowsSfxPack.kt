@@ -1,53 +1,60 @@
 package com.sysbot32.robotmc.installer
 
 import java.io.File
-import java.net.URI
-import java.net.http.HttpClient
-import java.net.http.HttpRequest
-import java.net.http.HttpResponse
 import java.nio.charset.StandardCharsets
-import java.security.MessageDigest
 
 /**
- * Windows 릴리스가 묶는 7-Zip SFX.
+ * Windows 릴리스 exe는 우리 스텁 뒤에 앱 이미지 7z를 붙인 파일이다.
  *
- * 공식 7zSD.sfx는 임시 폴더에 풀고 프로그램을 끝낸 뒤 그 폴더를 지운다.
- * 여기에 붙이는 스텁은 Oleg Scherbakov의 수정 모듈이다. InstallPath가 있으면 그 폴더를 남긴다.
- *
- * 스텁은 GNU LGPL 2.1 이상이다. 저작권은 Igor Pavlov와 Oleg Scherbakov에게 있다.
- * 설치기 코드와 링크하지 않고, 스텁 뒤에 이 설정과 7z 페이로드를 이어 붙인다.
- * 모듈 소스: https://github.com/OlegScherbakov/7zSFX
+ * 스텁은 퍼블릭 도메인 LZMA SDK로 7z를 풀어 `%LOCALAPPDATA%\RobotMC Installer`에 두고
+ * `RobotMC Installer.exe`를 실행한다. 푼 파일은 지우지 않는다.
+ * 7-Zip SFX 모듈이나 그 수정본을 받거나 앞에 붙이지 않는다.
  */
 object WindowsSfxPack {
-    const val CONFIG_RELATIVE_PATH = "packaging/windows-sfx/config.txt"
-    const val LICENSE_NOTICE_RELATIVE_PATH = "packaging/windows-sfx/NOTICE.txt"
     const val LAUNCHER_FILE_NAME = "RobotMC Installer.exe"
+    const val INSTALL_DIR_NAME = "RobotMC Installer"
+    const val LOCAL_APP_DATA = "LOCALAPPDATA"
     const val RUNTIME_DIRECTORY = "runtime"
     const val OUTPUT_DIR = "windows-sfx"
+    const val STUB_RELATIVE_PATH = "packaging/windows-sfx/stub/sfxstub.c"
+    const val LZMA_SDK_RELATIVE_DIR = "packaging/windows-sfx/lzma-sdk/C"
+    const val LZMA_SDK_LICENSE_RELATIVE_PATH = "packaging/windows-sfx/lzma-sdk/DOC/lzma-sdk.txt"
+    const val NOTICE_RELATIVE_PATH = "packaging/windows-sfx/NOTICE.txt"
+    const val ICON_RELATIVE_PATH = "src/main/icon/installer-app-icon.ico"
+    const val LZMA_SDK_VERSION = "26.04"
 
-    /**
-     * 수정 모듈은 저장소에 넣지 않는다. GNU LGPL 2.1 이상이라 빌드할 때 이 커밋에서 받고,
-     * 고지 파일을 푼 폴더에 같이 넣는다.
-     */
-    const val MODULE_ARCHIVE_URL =
-        "https://github.com/OlegScherbakov/7zSFX/raw/01ed0bf2003ae80cdc5e37e893053d151478c812/files/7zsd_extra_170_3900.7z"
-    const val MODULE_ARCHIVE_SHA256 = "223ebd7b6146fc2ae6f2ffd7879aedff7901cab7dcfa859109790df17847797b"
-    const val MODULE_ARCHIVE_NAME = "7zsd_extra_170_3900.7z"
-    const val MODULE_ENTRY_NAME = "7zsd_All_x64.sfx"
+    /** 링크하는 LZMA SDK 디코더. 인코더와 SFX 모듈 소스는 넣지 않는다. */
+    val DECODER_SOURCE_NAMES = listOf(
+        "7zAlloc.c",
+        "7zArcIn.c",
+        "7zBuf.c",
+        "7zBuf2.c",
+        "7zCrc.c",
+        "7zCrcOpt.c",
+        "7zDec.c",
+        "7zStream.c",
+        "Bcj2.c",
+        "Bra.c",
+        "Bra86.c",
+        "BraIA64.c",
+        "CpuArch.c",
+        "Delta.c",
+        "Lzma2Dec.c",
+        "LzmaDec.c",
+    )
 
-    /** 수정 모듈 바이너리의 저작권 표기. 공식 7zSD.sfx에는 없다. */
-    const val MODIFIED_MODULE_MARKER = "Scherbakov"
+    fun stubSource(projectDir: File): File = File(projectDir, STUB_RELATIVE_PATH)
 
-    fun configFile(projectDir: File): File = File(projectDir, CONFIG_RELATIVE_PATH)
+    fun lzmaSdkDir(projectDir: File): File = File(projectDir, LZMA_SDK_RELATIVE_DIR)
 
-    fun licenseNoticeFile(projectDir: File): File = File(projectDir, LICENSE_NOTICE_RELATIVE_PATH)
+    fun lzmaSdkLicense(projectDir: File): File = File(projectDir, LZMA_SDK_LICENSE_RELATIVE_PATH)
 
-    fun shippedConfigText(projectDir: File): String {
-        val file = configFile(projectDir)
-        if (!file.isFile) {
-            throw IllegalStateException("SFX 설정이 없습니다: ${file.absolutePath}")
-        }
-        return file.readText(StandardCharsets.UTF_8)
+    fun noticeFile(projectDir: File): File = File(projectDir, NOTICE_RELATIVE_PATH)
+
+    fun iconFile(projectDir: File): File = File(projectDir, ICON_RELATIVE_PATH)
+
+    fun decoderSources(projectDir: File): List<File> {
+        return DECODER_SOURCE_NAMES.map { name -> File(lzmaSdkDir(projectDir), name) }
     }
 
     fun outputExe(buildDir: File, version: String): File {
@@ -76,97 +83,135 @@ object WindowsSfxPack {
         return files
     }
 
-    fun requireModifiedSfxModule(module: ByteArray) {
-        if (module.size < 64 || module[0] != 'M'.code.toByte() || module[1] != 'Z'.code.toByte()) {
-            throw IllegalArgumentException("SFX 모듈이 PE가 아닙니다.")
+    /** 7z가 BCJ/BCJ2 필터를 붙이지 않도록 메서드를 LZMA2 하나로 고정한다. */
+    fun payloadArguments(payload: File, listFile: File): List<String> {
+        return listOf(
+            "a",
+            "-t7z",
+            "-m0=LZMA2",
+            "-mx=5",
+            "-scsUTF-8",
+            "-y",
+            "-bso0",
+            "-bsp0",
+            payload.absolutePath,
+            "@${listFile.absolutePath}",
+        )
+    }
+
+    fun iconResourceScript(iconFile: File, manifestFile: File): String {
+        val icon = iconFile.absolutePath.replace('\\', '/')
+        val manifest = manifestFile.absolutePath.replace('\\', '/')
+        return "1 ICON \"$icon\"\r\n1 24 \"$manifest\"\r\n"
+    }
+
+    fun requireOurStub(stub: ByteArray) {
+        if (stub.size < 64 || stub[0] != 'M'.code.toByte() || stub[1] != 'Z'.code.toByte()) {
+            throw IllegalArgumentException("SFX 스텁이 PE가 아닙니다.")
         }
-        if (indexOf(module, MODIFIED_MODULE_MARKER.toByteArray(StandardCharsets.US_ASCII)) < 0) {
-            throw IllegalArgumentException("공식 7zSD.sfx는 InstallPath를 유지하지 않습니다. 수정 모듈이 필요합니다.")
+        if (indexOf(stub, "Scherbakov".toByteArray(StandardCharsets.US_ASCII)) >= 0) {
+            throw IllegalArgumentException("수정 SFX 모듈은 붙이지 않습니다.")
         }
-        if (indexOf(module, "InstallPath".toByteArray(StandardCharsets.UTF_16LE)) < 0) {
-            throw IllegalArgumentException("SFX 모듈이 InstallPath를 다루지 않습니다.")
+        if (indexOf(stub, "7zsd_All_x64".toByteArray(StandardCharsets.US_ASCII)) >= 0) {
+            throw IllegalArgumentException("수정 SFX 모듈은 붙이지 않습니다.")
         }
     }
 
-    fun concatenate(module: ByteArray, config: ByteArray, payload: ByteArray): ByteArray {
-        requireModifiedSfxModule(module)
-        val text = config.toString(StandardCharsets.UTF_8)
-        if (!text.contains(";!@Install@!UTF-8!") || !text.contains(";!@InstallEnd@!")) {
-            throw IllegalArgumentException("SFX 설정 마커가 없습니다.")
-        }
-        if (payload.size < 6 || payload[0] != '7'.code.toByte() || payload[1] != 'z'.code.toByte()) {
+    fun requirePayload(payload: ByteArray) {
+        if (payload.size < 6 || payload[0] != '7'.code.toByte() || payload[1] != 'z'.code.toByte()
+            || payload[2] != 0xBC.toByte() || payload[3] != 0xAF.toByte()
+            || payload[4] != 0x27.toByte() || payload[5] != 0x1C.toByte()
+        ) {
             throw IllegalArgumentException("페이로드가 7z가 아닙니다.")
         }
-        return module + config + payload
     }
 
-    fun reusableModule(archive: File, extracted: File, expectedSha256: String): File? {
-        if (!archive.isFile || !extracted.isFile) {
-            return null
+    fun writeAssembledExe(stub: ByteArray, payload: File, destination: File) {
+        requireOurStub(stub)
+        val header = ByteArray(6)
+        payload.inputStream().use { input ->
+            val read = input.read(header)
+            if (read < header.size) {
+                throw IllegalArgumentException("페이로드가 7z가 아닙니다.")
+            }
         }
-        if (!sha256(archive).equals(expectedSha256, ignoreCase = true)) {
-            return null
+        requirePayload(header)
+        val parent = destination.parentFile
+        if (parent != null && !parent.isDirectory && !parent.mkdirs()) {
+            throw IllegalStateException("SFX 출력 폴더를 만들지 못했습니다: ${parent.absolutePath}")
         }
-        return extracted
+        destination.outputStream().use { out ->
+            out.write(stub)
+            payload.inputStream().use { input -> input.copyTo(out) }
+        }
     }
 
-    fun downloadModule(cacheDir: File, sevenZip: File): File {
-        if (!cacheDir.isDirectory && !cacheDir.mkdirs()) {
-            throw IllegalStateException("SFX 모듈 폴더를 만들지 못했습니다: ${cacheDir.absolutePath}")
+    fun compileStub(projectDir: File, iconFile: File, workDir: File, destination: File): File {
+        val sources = listOf(stubSource(projectDir)) + decoderSources(projectDir)
+        sources.filter { !it.isFile }.takeIf { it.isNotEmpty() }?.let { missing ->
+            throw IllegalStateException("SFX 소스가 없습니다: ${missing.joinToString { it.path }}")
         }
-        val archive = File(cacheDir, MODULE_ARCHIVE_NAME)
-        val extracted = File(cacheDir, MODULE_ENTRY_NAME)
-        reusableModule(archive, extracted, MODULE_ARCHIVE_SHA256)?.let { cached ->
-            requireModifiedSfxModule(cached.readBytes())
-            return cached
+        if (!iconFile.isFile) {
+            throw IllegalStateException("SFX 아이콘이 없습니다: ${iconFile.absolutePath}")
         }
-        if (archive.exists() && !archive.delete()) {
-            throw IllegalStateException("이전 SFX 모듈 아카이브를 지우지 못했습니다: ${archive.absolutePath}")
+        return compileWindowsProgram(
+            sources = sources,
+            iconFile = iconFile,
+            includeDir = lzmaSdkDir(projectDir),
+            workDir = workDir,
+            destination = destination,
+        )
+    }
+
+    fun compileWindowsProgram(
+        sources: List<File>,
+        iconFile: File?,
+        includeDir: File?,
+        workDir: File,
+        destination: File,
+    ): File {
+        if (sources.isEmpty() || sources.any { !it.isFile }) {
+            throw IllegalArgumentException("컴파일할 C 소스가 없습니다.")
         }
-        val client = HttpClient.newBuilder().followRedirects(HttpClient.Redirect.NORMAL).build()
-        val request = HttpRequest.newBuilder(URI.create(MODULE_ARCHIVE_URL)).GET().build()
-        val response = client.send(request, HttpResponse.BodyHandlers.ofFile(archive.toPath()))
-        if (response.statusCode() != 200) {
-            archive.delete()
-            throw IllegalStateException("SFX 모듈을 받지 못했습니다: HTTP ${response.statusCode()}")
+        if (!workDir.isDirectory && !workDir.mkdirs()) {
+            throw IllegalStateException("SFX 컴파일 폴더를 만들지 못했습니다: ${workDir.absolutePath}")
         }
-        val actual = sha256(archive)
-        if (!actual.equals(MODULE_ARCHIVE_SHA256, ignoreCase = true)) {
-            archive.delete()
-            throw IllegalStateException("SFX 모듈 해시가 다릅니다: $actual")
+        val manifest = File(workDir, "stub.manifest")
+        manifest.writeText(LONG_PATH_MANIFEST, StandardCharsets.US_ASCII)
+        val resource = if (iconFile != null) {
+            if (!iconFile.isFile) {
+                throw IllegalStateException("SFX 아이콘이 없습니다: ${iconFile.absolutePath}")
+            }
+            val rc = File(workDir, "stub.rc")
+            rc.writeText(iconResourceScript(iconFile, manifest), StandardCharsets.US_ASCII)
+            rc
+        } else {
+            null
         }
-        val extract = ProcessBuilder(
-            listOf(
-                sevenZip.absolutePath,
-                "x",
-                "-y",
-                "-o${cacheDir.absolutePath}${File.separator}",
-                archive.absolutePath,
-            ),
-        ).redirectErrorStream(true).start()
-        val extractOutput = extract.inputStream.bufferedReader(StandardCharsets.UTF_8).readText()
-        val extractCode = extract.waitFor()
-        if (extractCode != 0 || !extracted.isFile) {
-            throw IllegalStateException("SFX 모듈을 풀지 못했습니다 ($extractCode): $extractOutput")
+        val msvc = findVcVars64()
+        if (msvc != null) {
+            compileWithMsvc(msvc, sources, resource, includeDir, workDir, destination)
+        } else {
+            compileWithMingw(sources, resource, includeDir, workDir, destination)
         }
-        requireModifiedSfxModule(extracted.readBytes())
-        return extracted
+        if (!destination.isFile) {
+            throw IllegalStateException("SFX 스텁이 만들어지지 않았습니다: ${destination.absolutePath}")
+        }
+        return destination
     }
 
     fun pack(
         imageDir: File,
-        configFile: File,
-        moduleFile: File,
+        stubFile: File,
         sevenZip: File,
         destination: File,
-        licenseNotice: File,
     ) {
         val entries = sfxArchiveEntries(imageDir)
-        if (!licenseNotice.isFile) {
-            throw IllegalStateException("SFX 라이선스 고지가 없습니다: ${licenseNotice.absolutePath}")
+        if (!stubFile.isFile) {
+            throw IllegalStateException("SFX 스텁이 없습니다: ${stubFile.absolutePath}")
         }
-        val module = moduleFile.readBytes()
-        val config = configFile.readBytes()
+        val stub = stubFile.readBytes()
+        requireOurStub(stub)
         val work = File(destination.parentFile, "work")
         if (work.exists() && !work.deleteRecursively()) {
             throw IllegalStateException("SFX 작업 폴더를 지우지 못했습니다: ${work.absolutePath}")
@@ -181,51 +226,12 @@ object WindowsSfxPack {
                 entries.joinToString("\n") { it.relativeTo(imageDir).invariantSeparatorsPath } + "\n",
                 StandardCharsets.UTF_8,
             )
-            val command = listOf(
-                sevenZip.absolutePath,
-                "a",
-                "-t7z",
-                "-m0=LZMA2",
-                "-mx=5",
-                "-scsUTF-8",
-                "-y",
-                "-bso0",
-                "-bsp0",
-                payload.absolutePath,
-                "@${listFile.absolutePath}",
+            runProcess(
+                listOf(sevenZip.absolutePath) + payloadArguments(payload, listFile),
+                imageDir,
+                "7z가 실패했습니다",
             )
-            val process = ProcessBuilder(command)
-                .directory(imageDir)
-                .redirectErrorStream(true)
-                .start()
-            val output = process.inputStream.bufferedReader(StandardCharsets.UTF_8).readText()
-            val code = process.waitFor()
-            if (code != 0) {
-                throw IllegalStateException("7z가 실패했습니다 ($code): $output")
-            }
-            val notice = ProcessBuilder(
-                listOf(
-                    sevenZip.absolutePath,
-                    "a",
-                    "-t7z",
-                    "-m0=LZMA2",
-                    "-mx=5",
-                    "-y",
-                    "-bso0",
-                    "-bsp0",
-                    payload.absolutePath,
-                    licenseNotice.name,
-                ),
-            ).directory(licenseNotice.parentFile).redirectErrorStream(true).start()
-            val noticeOutput = notice.inputStream.bufferedReader(StandardCharsets.UTF_8).readText()
-            val noticeCode = notice.waitFor()
-            if (noticeCode != 0) {
-                throw IllegalStateException("라이선스 고지를 7z에 넣지 못했습니다 ($noticeCode): $noticeOutput")
-            }
-            if (!destination.parentFile.isDirectory && !destination.parentFile.mkdirs()) {
-                throw IllegalStateException("SFX 출력 폴더를 만들지 못했습니다: ${destination.parent}")
-            }
-            destination.writeBytes(concatenate(module, config, payload.readBytes()))
+            writeAssembledExe(stub, payload, destination)
         } finally {
             work.deleteRecursively()
         }
@@ -249,19 +255,154 @@ object WindowsSfxPack {
             ?: throw IllegalStateException("7z.exe가 없습니다. 7-Zip을 설치한 뒤 다시 실행합니다.")
     }
 
-    fun sha256(file: File): String {
-        val digest = MessageDigest.getInstance("SHA-256")
-        file.inputStream().use { input ->
-            val buffer = ByteArray(1024 * 1024)
-            while (true) {
-                val read = input.read(buffer)
-                if (read < 0) {
-                    break
-                }
-                digest.update(buffer, 0, read)
+    private fun compileWithMsvc(
+        vcvars: File,
+        sources: List<File>,
+        resourceScript: File?,
+        includeDir: File?,
+        workDir: File,
+        destination: File,
+    ) {
+        val resource = if (resourceScript != null) {
+            val compiled = File(workDir, "stub.res")
+            val script = File(workDir, "compile-resource.cmd")
+            script.writeText(
+                "@echo off\r\n" +
+                    "call \"${vcvars.absolutePath}\" > \"${File(workDir, "vcvars.log").absolutePath}\" 2>&1\r\n" +
+                    "if errorlevel 1 exit /b 1\r\n" +
+                    "rc /nologo /fo \"${compiled.absolutePath}\" \"${resourceScript.absolutePath}\"\r\n" +
+                    "exit /b %ERRORLEVEL%\r\n",
+                StandardCharsets.US_ASCII,
+            )
+            runProcess(listOf("cmd.exe", "/c", script.absolutePath), workDir, "리소스 컴파일이 실패했습니다")
+            compiled
+        } else {
+            null
+        }
+        val response = File(workDir, "compile.rsp")
+        val lines = mutableListOf(
+            "/nologo",
+            "/O1",
+            "/W3",
+            "/MT",
+            "/D_7ZIP_ST",
+        )
+        if (includeDir != null) {
+            lines += "/I\"${includeDir.absolutePath}\""
+        }
+        lines += "/Fe\"${destination.absolutePath}\""
+        lines += sources.map { "\"${it.absolutePath}\"" }
+        lines += "/link"
+        lines += "/SUBSYSTEM:WINDOWS"
+        lines += "/ENTRY:wWinMainCRTStartup"
+        if (resource != null) {
+            lines += "\"${resource.absolutePath}\""
+        }
+        response.writeText(lines.joinToString("\r\n") + "\r\n", StandardCharsets.US_ASCII)
+        val script = File(workDir, "compile-stub.cmd")
+        script.writeText(
+            "@echo off\r\n" +
+                "call \"${vcvars.absolutePath}\" > \"${File(workDir, "vcvars.log").absolutePath}\" 2>&1\r\n" +
+                "if errorlevel 1 exit /b 1\r\n" +
+                "cl @\"${response.absolutePath}\"\r\n" +
+                "exit /b %ERRORLEVEL%\r\n",
+            StandardCharsets.US_ASCII,
+        )
+        runProcess(listOf("cmd.exe", "/c", script.absolutePath), workDir, "SFX 스텁을 컴파일하지 못했습니다")
+    }
+
+    private fun compileWithMingw(
+        sources: List<File>,
+        resourceScript: File?,
+        includeDir: File?,
+        workDir: File,
+        destination: File,
+    ) {
+        val gcc = findOnPath("gcc.exe") ?: findOnPath("gcc")
+        val windres = findOnPath("windres.exe") ?: findOnPath("windres")
+        if (gcc == null || windres == null) {
+            throw IllegalStateException(
+                "SFX 스텁을 컴파일할 cl 또는 gcc가 없습니다. Visual Studio의 vcvars64.bat 또는 gcc와 windres를 PATH에 둡니다.",
+            )
+        }
+        val resource = if (resourceScript != null) {
+            val compiled = File(workDir, "stub.res")
+            runProcess(
+                listOf(windres.absolutePath, "-O", "coff", "-o", compiled.absolutePath, resourceScript.absolutePath),
+                workDir,
+                "리소스 컴파일이 실패했습니다",
+            )
+            compiled
+        } else {
+            null
+        }
+        val command = mutableListOf(
+            gcc.absolutePath,
+            "-O2",
+            "-s",
+            "-static",
+            "-mwindows",
+            "-municode",
+            "-D_7ZIP_ST",
+        )
+        if (includeDir != null) {
+            command += "-I${includeDir.absolutePath}"
+        }
+        command += listOf("-o", destination.absolutePath)
+        command += sources.map { it.absolutePath }
+        if (resource != null) {
+            command += resource.absolutePath
+        }
+        runProcess(command, workDir, "SFX 스텁을 컴파일하지 못했습니다")
+    }
+
+    private fun findVcVars64(): File? {
+        val vswhere = listOf(
+            File("C:/Program Files (x86)/Microsoft Visual Studio/Installer/vswhere.exe"),
+            File("C:/Program Files/Microsoft Visual Studio/Installer/vswhere.exe"),
+        ).firstOrNull { it.isFile } ?: return null
+        val process = ProcessBuilder(
+            listOf(
+                vswhere.absolutePath,
+                "-latest",
+                "-products",
+                "*",
+                "-requires",
+                "Microsoft.VisualStudio.Component.VC.Tools.x86.x64",
+                "-property",
+                "installationPath",
+            ),
+        ).redirectErrorStream(true).start()
+        val output = process.inputStream.bufferedReader(StandardCharsets.UTF_8).readText().trim()
+        if (process.waitFor() != 0 || output.isEmpty()) {
+            return null
+        }
+        val install = File(output.lineSequence().first { it.isNotBlank() })
+        val vcvars = File(install, "VC/Auxiliary/Build/vcvars64.bat")
+        return vcvars.takeIf { it.isFile }
+    }
+
+    private fun findOnPath(name: String): File? {
+        val path = System.getenv("PATH").orEmpty().split(File.pathSeparator)
+        for (dir in path) {
+            val candidate = File(dir, name)
+            if (candidate.isFile) {
+                return candidate
             }
         }
-        return digest.digest().joinToString("") { "%02x".format(it) }
+        return null
+    }
+
+    private fun runProcess(command: List<String>, directory: File, failure: String) {
+        val process = ProcessBuilder(command)
+            .directory(directory)
+            .redirectErrorStream(true)
+            .start()
+        val output = process.inputStream.bufferedReader(StandardCharsets.UTF_8).readText()
+        val code = process.waitFor()
+        if (code != 0) {
+            throw IllegalStateException("$failure ($code): $output")
+        }
     }
 
     private fun indexOf(haystack: ByteArray, needle: ByteArray): Int {
@@ -282,4 +423,14 @@ object WindowsSfxPack {
         }
         return -1
     }
+
+    private const val LONG_PATH_MANIFEST = """<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<assembly xmlns="urn:schemas-microsoft-com:asm.v1" manifestVersion="1.0">
+  <application xmlns="urn:schemas-microsoft-com:asm.v3">
+    <windowsSettings>
+      <longPathAware xmlns="http://schemas.microsoft.com/SMI/2016/WindowsSettings">true</longPathAware>
+    </windowsSettings>
+  </application>
+</assembly>
+"""
 }

@@ -206,19 +206,18 @@ tasks.register("packageInstallerAppImage") {
 }
 
 // test에 붙이지 않는다. 이미지를 만들면 단위 테스트가 느려진다.
-// Windows 러너에서만 의미 있다. jpackage는 호스트 OS 이미지만 만들고, 수정 SFX 모듈이 InstallPath를 유지한다.
+// Windows 러너에서만 의미 있다. jpackage는 호스트 OS 이미지만 만들고, 우리 스텁이 설치 폴더를 남긴다.
 tasks.register("packageWindowsSfx") {
     group = "distribution"
-    description = "Windows 앱 이미지를 7-Zip SFX exe 하나로 묶는다."
+    description = "Windows 앱 이미지를 우리 SFX 스텁과 7z로 묶는다."
     dependsOn("packageInstallerAppImage")
-    val config = WindowsSfxPack.configFile(project.projectDir)
-    val licenseNotice = WindowsSfxPack.licenseNoticeFile(project.projectDir)
-    val sfxModule = providers.gradleProperty("sfxModule")
-    inputs.file(config)
-    inputs.file(licenseNotice)
+    val icon = InstallerAppIcon.fileFor("windows", project.projectDir)
+    inputs.file(icon)
+    inputs.file(WindowsSfxPack.stubSource(project.projectDir))
+    inputs.files(WindowsSfxPack.decoderSources(project.projectDir))
+    inputs.dir(WindowsSfxPack.lzmaSdkDir(project.projectDir))
     inputs.dir(installerAppImageDir)
     inputs.property("version", providers.provider { project.version.toString() })
-    sfxModule.orNull?.let { inputs.file(File(it)) }
     val output = layout.buildDirectory.file(
         "${WindowsSfxPack.OUTPUT_DIR}/robotmc-installer-${project.version}.exe",
     )
@@ -228,18 +227,17 @@ tasks.register("packageWindowsSfx") {
             throw org.gradle.api.GradleException("packageWindowsSfx는 Windows에서만 앱 이미지를 묶는다.")
         }
         val sevenZip = WindowsSfxPack.findSevenZip()
-        val module = sfxModule.orNull?.let { File(it) }
-            ?: WindowsSfxPack.downloadModule(
-                layout.buildDirectory.dir("${WindowsSfxPack.OUTPUT_DIR}/module").get().asFile,
-                sevenZip,
-            )
+        val stub = WindowsSfxPack.compileStub(
+            projectDir = project.projectDir,
+            iconFile = icon,
+            workDir = layout.buildDirectory.dir("${WindowsSfxPack.OUTPUT_DIR}/stub-work").get().asFile,
+            destination = layout.buildDirectory.file("${WindowsSfxPack.OUTPUT_DIR}/stub.exe").get().asFile,
+        )
         WindowsSfxPack.pack(
             imageDir = installerImagePaths(installerAppImageDir.get().asFile).image,
-            configFile = config,
-            moduleFile = module,
+            stubFile = stub,
             sevenZip = sevenZip,
             destination = output.get().asFile,
-            licenseNotice = licenseNotice,
         )
     }
 }
