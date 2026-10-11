@@ -122,14 +122,14 @@
           <span>Windows</span>
           <span class="file">최신 릴리스</span>
         </a>
-        <p class="note">서명이 없어서 스마트 앱 컨트롤(SAC)이 켜져 있으면 실행이 막혀요.<br>Windows 보안의 앱 및 브라우저 컨트롤에서 Smart App Control을 꺼 주세요.</p>
+        <p class="note">서명이 없으면 스마트 앱 컨트롤(SAC)이 켜져 있을 때 실행이 막힐 수 있어요.<br>Windows 보안의 앱 &amp; 브라우저 컨트롤에서 스마트 앱 컨트롤을 꺼 주세요.<br>꺼도 Windows의 PC 보호가 뜨면 추가 정보를 누른 뒤 실행해 주세요.</p>
       </li>
       <li>
         <a class="download" data-asset-suffix=".jar" href="https://github.com/robot-server/robotmc-installer/releases/latest">
           <span>Universal</span>
           <span class="file">최신 릴리스</span>
         </a>
-        <p class="note">Java 25 JRE가 필요해요. 없으면 <a class="guide" href="https://adoptium.net/temurin/releases/?version=25&amp;package=jre">Eclipse Temurin JRE</a>를 설치해 주세요.<br>터미널에서 이 명령으로 실행해요.<br><code id="jar-command">실행 명령을 확인하는 중이에요.</code></p>
+        <p class="note">Java 25 JRE가 필요해요. 없으면 <a class="guide" href="https://adoptium.net/temurin/releases/?version=25&amp;package=jre">Eclipse Temurin JRE</a>를 설치해 주세요.<br>받은 폴더에서 이 명령으로 실행해요.<br><code id="jar-command">실행 명령을 확인하는 중이에요.</code></p>
       </li>
     </ul>
   </main>
@@ -138,12 +138,28 @@
       var api = "https://api.github.com/repos/robot-server/robotmc-installer/releases/latest";
       var releases = "https://github.com/robot-server/robotmc-installer/releases/";
       var status = document.getElementById("release-version");
-      fetch(api).then(function (response) {
+      var command = document.getElementById("jar-command");
+      var controller = new AbortController();
+      var timer = setTimeout(function () { controller.abort(); }, 8000);
+
+      function showCommand(name) {
+        if (!command) return;
+        command.textContent = name ? "java -jar " + name : "실행 명령을 불러오지 못했어요.";
+      }
+
+      function fallbackJarName(tag) {
+        if (!tag || tag.charAt(0) !== "v" || tag.length < 2) return "";
+        return "robotmc-installer-" + tag.slice(1) + ".jar";
+      }
+
+      fetch(api, { signal: controller.signal }).then(function (response) {
         if (!response.ok) throw new Error("release");
         return response.json();
       }).then(function (release) {
+        var tag = release && release.tag_name ? release.tag_name : "";
         var assets = release && release.assets ? release.assets : [];
         var links = document.querySelectorAll("a[data-asset-suffix]");
+        var jarName = "";
         for (var i = 0; i < links.length; i++) {
           var link = links[i];
           var suffix = link.getAttribute("data-asset-suffix");
@@ -163,18 +179,17 @@
           link.href = asset.browser_download_url;
           var file = link.querySelector(".file");
           if (file) file.textContent = asset.name;
-          if (suffix === ".jar") {
-            var command = document.getElementById("jar-command");
-            if (command) command.textContent = "java -jar " + asset.name;
-          }
+          if (suffix === ".jar") jarName = asset.name;
         }
+        showCommand(jarName || fallbackJarName(tag));
         if (status) {
-          status.textContent = release.tag_name
-            ? "최신 버전은 " + release.tag_name + "이에요."
-            : "최신 릴리스 목록에서 받아 주세요.";
+          status.textContent = tag ? "최신 버전: " + tag : "최신 릴리스 목록에서 받아 주세요.";
         }
       }).catch(function () {
+        showCommand("");
         if (status) status.textContent = "최신 릴리스 목록에서 받아 주세요.";
+      }).then(function () {
+        clearTimeout(timer);
       });
     })();
   </script>
