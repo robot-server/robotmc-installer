@@ -100,6 +100,11 @@ class WindowsSfxScenarioTest {
         assertFalse(packSource.contains("https://github.com/OlegScherbakov"))
         assertTrue(packSource.contains("7zsd_All_x64"))
         assertTrue(packSource.contains("수정 SFX 모듈은 붙이지 않습니다."))
+        assertTrue(WindowsSfxPack.MINGW_URL.contains("skeeto/w64devkit/releases/download/v2.10.0/w64devkit-x64-2.10.0.7z.exe"))
+        assertEquals(64, WindowsSfxPack.MINGW_SHA256.length)
+        assertFalse(WindowsSfxPack.MINGW_URL.contains("OlegScherbakov"))
+        assertFalse(WindowsSfxPack.MINGW_URL.contains("7zsd"))
+        assertTrue(packSource.contains("downloadMingw("))
     }
 
     @Test

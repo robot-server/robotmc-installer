@@ -1,7 +1,12 @@
 package com.sysbot32.robotmc.installer
 
 import java.io.File
+import java.net.URI
+import java.net.http.HttpClient
+import java.net.http.HttpRequest
+import java.net.http.HttpResponse
 import java.nio.charset.StandardCharsets
+import java.security.MessageDigest
 
 /**
  * Windows 릴리스 exe는 우리 스텁 뒤에 앱 이미지 7z를 붙인 파일이다.
@@ -22,6 +27,17 @@ object WindowsSfxPack {
     const val NOTICE_RELATIVE_PATH = "packaging/windows-sfx/NOTICE.txt"
     const val ICON_RELATIVE_PATH = "src/main/icon/installer-app-icon.ico"
     const val LZMA_SDK_VERSION = "26.04"
+
+    /**
+     * Visual Studio가 없는 Windows에서 스텁을 컴파일하는 MinGW.
+     * 설치기 exe에 넣지 않는 빌드 도구이고, 해시가 같으면 다시 받지 않는다.
+     */
+    const val MINGW_URL =
+        "https://github.com/skeeto/w64devkit/releases/download/v2.10.0/w64devkit-x64-2.10.0.7z.exe"
+    const val MINGW_ARCHIVE_NAME = "w64devkit-x64-2.10.0.7z.exe"
+    const val MINGW_SHA256 = "18d0a4c71a166f8401ab6305781bec5882b40b5e06ba9807c61cb5f3b3c6325e"
+
+    class MingwTools(val gcc: File, val windres: File)
 
     /** 링크하는 LZMA SDK 디코더. 인코더와 SFX 모듈 소스는 넣지 않는다. */
     val DECODER_SOURCE_NAMES = listOf(
@@ -192,7 +208,8 @@ object WindowsSfxPack {
         if (msvc != null) {
             compileWithMsvc(msvc, sources, resource, includeDir, workDir, destination)
         } else {
-            compileWithMingw(sources, resource, includeDir, workDir, destination)
+            val mingw = findMingw() ?: downloadMingw(mingwCacheDir(), findSevenZip())
+            compileWithMingw(mingw, sources, resource, includeDir, workDir, destination)
         }
         if (!destination.isFile) {
             throw IllegalStateException("SFX 스텁이 만들어지지 않았습니다: ${destination.absolutePath}")
@@ -312,23 +329,17 @@ object WindowsSfxPack {
     }
 
     private fun compileWithMingw(
+        mingw: MingwTools,
         sources: List<File>,
         resourceScript: File?,
         includeDir: File?,
         workDir: File,
         destination: File,
     ) {
-        val gcc = findOnPath("gcc.exe") ?: findOnPath("gcc")
-        val windres = findOnPath("windres.exe") ?: findOnPath("windres")
-        if (gcc == null || windres == null) {
-            throw IllegalStateException(
-                "SFX 스텁을 컴파일할 cl 또는 gcc가 없습니다. Visual Studio의 vcvars64.bat 또는 gcc와 windres를 PATH에 둡니다.",
-            )
-        }
         val resource = if (resourceScript != null) {
             val compiled = File(workDir, "stub.res")
             runProcess(
-                listOf(windres.absolutePath, "-O", "coff", "-o", compiled.absolutePath, resourceScript.absolutePath),
+                listOf(mingw.windres.absolutePath, "-O", "coff", "-o", compiled.absolutePath, resourceScript.absolutePath),
                 workDir,
                 "리소스 컴파일이 실패했습니다",
             )
@@ -337,7 +348,7 @@ object WindowsSfxPack {
             null
         }
         val command = mutableListOf(
-            gcc.absolutePath,
+            mingw.gcc.absolutePath,
             "-O2",
             "-s",
             "-static",
@@ -380,6 +391,91 @@ object WindowsSfxPack {
         val install = File(output.lineSequence().first { it.isNotBlank() })
         val vcvars = File(install, "VC/Auxiliary/Build/vcvars64.bat")
         return vcvars.takeIf { it.isFile }
+    }
+
+    fun mingwCacheDir(): File {
+        return File(System.getProperty("user.home"), ".gradle/caches/robotmc-sfx-mingw")
+    }
+
+    fun findMingw(): MingwTools? {
+        val pathGcc = findOnPath("gcc.exe") ?: findOnPath("gcc")
+        val pathWindres = findOnPath("windres.exe") ?: findOnPath("windres")
+        if (pathGcc != null && pathWindres != null) {
+            return MingwTools(pathGcc, pathWindres)
+        }
+        val localAppData = System.getenv("LOCALAPPDATA").orEmpty()
+        val bins = listOf(
+            File("C:/w64devkit/bin"),
+            File("C:/mingw64/bin"),
+            File("C:/msys64/ucrt64/bin"),
+            File("C:/msys64/mingw64/bin"),
+            File(localAppData, "w64devkit/bin"),
+        )
+        return bins.firstNotNullOfOrNull { mingwIn(it) }
+    }
+
+    fun downloadMingw(cacheDir: File, sevenZip: File): MingwTools {
+        if (!cacheDir.isDirectory && !cacheDir.mkdirs()) {
+            throw IllegalStateException("MinGW 폴더를 만들지 못했습니다: ${cacheDir.absolutePath}")
+        }
+        val extracted = File(cacheDir, "w64devkit/bin")
+        mingwIn(extracted)?.let { return it }
+        val archive = File(cacheDir, MINGW_ARCHIVE_NAME)
+        if (!archive.isFile || !sha256(archive).equals(MINGW_SHA256, ignoreCase = true)) {
+            downloadVerified(MINGW_URL, archive, MINGW_SHA256)
+        }
+        if (File(cacheDir, "w64devkit").exists() && !File(cacheDir, "w64devkit").deleteRecursively()) {
+            throw IllegalStateException("이전 MinGW를 지우지 못했습니다: ${cacheDir.absolutePath}")
+        }
+        runProcess(
+            listOf(sevenZip.absolutePath, "x", "-y", "-o${cacheDir.absolutePath}", archive.absolutePath),
+            cacheDir,
+            "MinGW를 풀지 못했습니다",
+        )
+        return mingwIn(extracted)
+            ?: throw IllegalStateException("MinGW에 gcc와 windres가 없습니다: ${extracted.absolutePath}")
+    }
+
+    fun sha256(file: File): String {
+        val digest = MessageDigest.getInstance("SHA-256")
+        file.inputStream().use { input ->
+            val buffer = ByteArray(1024 * 1024)
+            while (true) {
+                val read = input.read(buffer)
+                if (read < 0) {
+                    break
+                }
+                digest.update(buffer, 0, read)
+            }
+        }
+        return digest.digest().joinToString("") { "%02x".format(it) }
+    }
+
+    private fun mingwIn(binDir: File): MingwTools? {
+        val gcc = File(binDir, "gcc.exe")
+        val windres = File(binDir, "windres.exe")
+        if (!gcc.isFile || !windres.isFile) {
+            return null
+        }
+        return MingwTools(gcc, windres)
+    }
+
+    private fun downloadVerified(url: String, destination: File, expectedSha256: String) {
+        if (destination.exists() && !destination.delete()) {
+            throw IllegalStateException("이전 파일을 지우지 못했습니다: ${destination.absolutePath}")
+        }
+        val client = HttpClient.newBuilder().followRedirects(HttpClient.Redirect.NORMAL).build()
+        val request = HttpRequest.newBuilder(URI.create(url)).GET().build()
+        val response = client.send(request, HttpResponse.BodyHandlers.ofFile(destination.toPath()))
+        if (response.statusCode() != 200) {
+            destination.delete()
+            throw IllegalStateException("파일을 받지 못했습니다: HTTP ${response.statusCode()} $url")
+        }
+        val actual = sha256(destination)
+        if (!actual.equals(expectedSha256, ignoreCase = true)) {
+            destination.delete()
+            throw IllegalStateException("파일 해시가 다릅니다: $actual")
+        }
     }
 
     private fun findOnPath(name: String): File? {

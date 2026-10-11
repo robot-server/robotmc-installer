@@ -280,6 +280,62 @@ tasks.register("checkInstallerAppImage") {
     }
 }
 
+fun deleteExistingDirectory(directory: File, failure: String) {
+    if (!directory.exists()) {
+        return
+    }
+    val deadline = System.nanoTime() + 15_000_000_000L
+    var remaining: File? = null
+    while (true) {
+        if (System.getProperty("os.name").lowercase().contains("windows")) {
+            try {
+                ProcessBuilder(
+                    listOf(
+                        "attrib.exe",
+                        "-r",
+                        "-s",
+                        "-h",
+                        "/s",
+                        "/d",
+                        directory.absolutePath,
+                    ),
+                ).redirectErrorStream(true).redirectOutput(ProcessBuilder.Redirect.DISCARD).start().waitFor()
+            } catch (_: java.io.IOException) {
+                // attrib가 없어도 아래 삭제는 그대로 시도한다.
+            }
+        }
+        remaining = deleteTree(directory)
+        if (!directory.exists()) {
+            return
+        }
+        if (System.nanoTime() >= deadline) {
+            break
+        }
+        Thread.sleep(300)
+    }
+    val stuck = remaining?.absolutePath ?: directory.absolutePath
+    throw org.gradle.api.GradleException(
+        "$failure: ${directory.absolutePath}\n지우지 못한 항목: $stuck\n이 파일을 연 프로그램이 있으면 닫고 다시 실행합니다.",
+    )
+}
+
+fun deleteTree(directory: File): File? {
+    if (!directory.exists()) {
+        return null
+    }
+    var problem: File? = null
+    for (file in directory.walkBottomUp()) {
+        if (!file.exists()) {
+            continue
+        }
+        file.setWritable(true)
+        if (!file.delete() && file.exists()) {
+            problem = problem ?: file
+        }
+    }
+    return if (directory.exists()) problem ?: directory else null
+}
+
 fun buildInstallerAppImage(
     jdkHome: File,
     copiedJar: File,
@@ -294,12 +350,8 @@ fun buildInstallerAppImage(
     if (mainClass != bootJarMainClass) {
         throw org.gradle.api.GradleException("앱 이미지에 넣은 jar의 Main-Class가 $bootJarMainClass 이 아닙니다: $mainClass")
     }
-    if (destination.exists() && !destination.deleteRecursively()) {
-        throw org.gradle.api.GradleException("이전 앱 이미지를 지우지 못했습니다: ${destination.absolutePath}")
-    }
-    if (work.exists() && !work.deleteRecursively()) {
-        throw org.gradle.api.GradleException("작업 디렉터리를 지우지 못했습니다: ${work.absolutePath}")
-    }
+    deleteExistingDirectory(destination, "이전 앱 이미지를 지우지 못했습니다")
+    deleteExistingDirectory(work, "작업 디렉터리를 지우지 못했습니다")
     val input = File(work, "input")
     val runtime = File(work, "runtime")
     if (!input.mkdirs() || !destination.mkdirs()) {
