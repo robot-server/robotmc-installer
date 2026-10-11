@@ -1,6 +1,7 @@
 package com.sysbot32.robotmc.installer.mod.loader
 
 import com.sysbot32.robotmc.installer.launcher.LauncherProfilesJson
+import com.sysbot32.robotmc.installer.launcher.defaultInstallerHome
 import org.apache.commons.exec.CommandLine
 import java.nio.file.Path
 
@@ -21,9 +22,7 @@ data class ModLoaderInstallDecision(
 /**
  * 로그와 manifest가 있는 홈 캐시. 작업 디렉터리가 `/`여도 쓸 수 있다.
  */
-fun defaultModLoaderInstallerDirectory(): Path {
-    return Path.of(System.getProperty("user.home"), ".robotmc-installer")
-}
+fun defaultModLoaderInstallerDirectory(): Path = defaultInstallerHome()
 
 /**
  * [profiles]의 키는 보지 않는다. Fabric installer는 프로필 키를 `fabric-loader-<mc>`로 두고

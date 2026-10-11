@@ -349,8 +349,16 @@ class RobotMcProfileTest {
             properties,
             ProgressService(),
         )
+        val homeCache = Files.createTempDirectory("robotmc-home-cache")
+        val realHome = Path.of(System.getProperty("user.home"), ".robotmc-installer").toAbsolutePath().normalize()
+        service.homeCacheDirectory = homeCache
+        assertNotEquals(realHome, homeCache.toAbsolutePath().normalize())
+        assertFalse(homeCache.toAbsolutePath().normalize().startsWith(realHome))
+        val realHomeExisted = Files.exists(realHome)
 
         service.uninstall()
+
+        assertEquals(realHomeExisted, Files.exists(realHome))
 
         assertEquals("save", Files.readString(gameDir.resolve("saves/World/level.dat")))
         assertFalse(Files.exists(gameDir.resolve("mods")))
