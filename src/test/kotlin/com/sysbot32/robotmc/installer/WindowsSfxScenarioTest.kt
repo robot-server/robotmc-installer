@@ -146,6 +146,7 @@ class WindowsSfxScenarioTest {
         val arguments = WindowsSfxPack.payloadArguments(File("payload.7z"), File("files.txt"))
         assertTrue(arguments.contains("-t7z"))
         assertTrue(arguments.contains("-m0=LZMA2"))
+        assertTrue(arguments.contains("-ms=64m"))
         assertFalse(arguments.any { it.contains("BCJ") })
         assertFalse(arguments.any { it.startsWith("-m1=") })
     }
@@ -166,12 +167,16 @@ class WindowsSfxScenarioTest {
             )
             val payloadFile = File(work, "payload.7z")
             payloadFile.writeBytes(payload)
-            val stub = ByteArray(64)
-            stub[0] = 'M'.code.toByte()
-            stub[1] = 'Z'.code.toByte()
+            val stub = pe64Stub()
             val destination = File(work, "packed.exe")
             WindowsSfxPack.writeAssembledExe(stub, payloadFile, destination)
             assertTrue(destination.readBytes().contentEquals(stub + payload))
+            val pe32 = pe64Stub()
+            pe32[0x58] = 0x0B
+            pe32[0x59] = 0x01
+            assertFailsWith<IllegalArgumentException> {
+                WindowsSfxPack.writeAssembledExe(pe32, payloadFile, File(work, "pe32.exe"))
+            }
 
             val module = stub.copyOf()
             "Scherbakov".toByteArray(StandardCharsets.US_ASCII).copyInto(module, destinationOffset = 32)
@@ -200,7 +205,25 @@ class WindowsSfxScenarioTest {
         assertTrue(script.contains(icon.absolutePath.replace('\\', '/')))
         assertFalse(script.contains("UpdateResource"))
         assertFalse(script.contains("BeginUpdateResource"))
+        val encoded = File(root, "build/sfx-tool-text-probe.txt")
+        encoded.parentFile.mkdirs()
+        WindowsSfxPack.writeToolText(encoded, "ICON \"C:/홍길동/a.ico\"\r\n", utf16 = true)
+        val decoded = String(encoded.readBytes().copyOfRange(2, encoded.length().toInt()), Charsets.UTF_16LE)
+        assertTrue(decoded.contains("홍길동"))
+        encoded.delete()
     }
+}
+
+private fun pe64Stub(): ByteArray {
+    val stub = ByteArray(0x80)
+    stub[0] = 'M'.code.toByte()
+    stub[1] = 'Z'.code.toByte()
+    stub[0x3C] = 0x40
+    stub[0x40] = 'P'.code.toByte()
+    stub[0x41] = 'E'.code.toByte()
+    stub[0x58] = 0x0B
+    stub[0x59] = 0x02
+    return stub
 }
 
 private const val LOCAL_APP_DATA = "LOCALAPPDATA"

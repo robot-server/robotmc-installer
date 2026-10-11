@@ -18,12 +18,15 @@ Launch name: RobotMC Installer.exe
 #include <stdio.h>
 
 #pragma comment(lib, "comctl32.lib")
+#pragma comment(lib, "user32.lib")
+#pragma comment(lib, "gdi32.lib")
 
 #define SFX_ID_PROGRESS 100
 #define SFX_ID_CANCEL 101
-/* 창 제목과 본문: 압축 푸는 중. 버튼: 취소. */
+/* 창 제목과 본문: 압축 푸는 중. 버튼: 취소. 실패: 압축을 풀지 못했습니다. */
 #define SFX_EXTRACT_TITLE L"\xC555\xCD95 \xD478\xB294 \xC911"
 #define SFX_CANCEL_LABEL L"\xCDE8\xC18C"
+#define SFX_FAIL_TITLE L"\xC555\xCD95\xC744 \xD480\xC9C0 \xBABB\xD588\xC2B5\xB2C8\xB2E4."
 
 #define SFX_INSTALL_DIR_NAME L"RobotMC Installer"
 #define SFX_LAUNCHER_NAME L"RobotMC Installer.exe"
@@ -32,6 +35,7 @@ Launch name: RobotMC Installer.exe
 
 static const ISzAlloc g_Alloc = { SzAlloc, SzFree };
 static volatile LONG g_Cancel = 0;
+static volatile LONG g_ExtractOk = 0;
 static volatile LONGLONG g_BytesRead = 0;
 static volatile LONGLONG g_ArchiveBytes = 0;
 static HWND g_ExtractWindow = NULL;
@@ -50,11 +54,15 @@ typedef struct
 static void Report(const wchar_t *message)
 {
   wchar_t logPath[SFX_PATH_CAP];
+  wchar_t box[1400];
   DWORD logLen = GetEnvironmentVariableW(L"ROBOTMC_SFX_LOG", logPath, SFX_PATH_CAP);
+  int logged = 0;
+  int console = 0;
   if (logLen > 0 && logLen < SFX_PATH_CAP)
   {
     HANDLE log = CreateFileW(logPath, FILE_APPEND_DATA, FILE_SHARE_READ, NULL,
         OPEN_ALWAYS, FILE_ATTRIBUTE_NORMAL, NULL);
+    logged = 1;
     if (log != INVALID_HANDLE_VALUE)
     {
       DWORD written = 0;
@@ -69,6 +77,7 @@ static void Report(const wchar_t *message)
   if (AttachConsole(ATTACH_PARENT_PROCESS))
   {
     HANDLE out = CreateFileW(L"CONOUT$", GENERIC_WRITE, FILE_SHARE_WRITE, NULL, OPEN_EXISTING, 0, NULL);
+    console = 1;
     if (out != INVALID_HANDLE_VALUE)
     {
       DWORD written = 0;
@@ -77,6 +86,11 @@ static void Report(const wchar_t *message)
       CloseHandle(out);
     }
     FreeConsole();
+  }
+  if (!logged && !console)
+  {
+    swprintf(box, 1400, L"%ls\n\n%ls", SFX_FAIL_TITLE, message);
+    MessageBoxW(NULL, box, L"RobotMC Installer", MB_OK | MB_ICONERROR);
   }
 }
 
@@ -492,7 +506,7 @@ static void CloseExtractWindow(HANDLE done)
     if (wait == WAIT_OBJECT_0)
       break;
   }
-  if (!g_Cancel && g_ProgressBar)
+  if (g_ExtractOk && g_ProgressBar)
     SendMessageW(g_ProgressBar, PBM_SETPOS, 1000, 0);
   DestroyWindow(g_ExtractWindow);
   g_ExtractWindow = NULL;
@@ -632,6 +646,7 @@ static unsigned __stdcall ExtractWorker(void *argument)
   }
   else
     job->result = ExtractAll(job->db, &job->look->vt, job->installDir);
+  g_ExtractOk = job->result == 1;
   if (job->done)
     SetEvent(job->done);
   return 0;
@@ -707,6 +722,7 @@ static int SfxMain(void)
     job.done = doneEvent;
     job.result = 0;
     g_Cancel = 0;
+    g_ExtractOk = 0;
     g_BytesRead = 0;
     g_ArchiveBytes = (LONGLONG)overlay.size;
     ShowExtractWindow();

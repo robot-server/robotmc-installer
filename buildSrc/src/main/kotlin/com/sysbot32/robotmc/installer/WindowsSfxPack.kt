@@ -106,6 +106,7 @@ object WindowsSfxPack {
             "-t7z",
             "-m0=LZMA2",
             "-mx=5",
+            "-ms=64m",
             "-scsUTF-8",
             "-y",
             "-bso0",
@@ -131,6 +132,34 @@ object WindowsSfxPack {
         if (indexOf(stub, "7zsd_All_x64".toByteArray(StandardCharsets.US_ASCII)) >= 0) {
             throw IllegalArgumentException("수정 SFX 모듈은 붙이지 않습니다.")
         }
+        requireX64Pe(stub)
+    }
+
+    /** PE32(0x10B)는 오버레이를 찾지 못하므로 64비트 PE32+(0x20B)만 통과시킨다. */
+    fun requireX64Pe(stub: ByteArray) {
+        if (stub.size < 0x40) {
+            throw IllegalArgumentException("SFX 스텁이 64비트 PE가 아닙니다.")
+        }
+        val lfanew = readLe32(stub, 0x3C)
+        if (lfanew < 0x40 || lfanew + 26 > stub.size) {
+            throw IllegalArgumentException("SFX 스텁이 64비트 PE가 아닙니다.")
+        }
+        if (stub[lfanew] != 'P'.code.toByte() || stub[lfanew + 1] != 'E'.code.toByte()
+            || stub[lfanew + 2] != 0.toByte() || stub[lfanew + 3] != 0.toByte()
+        ) {
+            throw IllegalArgumentException("SFX 스텁이 64비트 PE가 아닙니다.")
+        }
+        if (readLe16(stub, lfanew + 24) != 0x20B) {
+            throw IllegalArgumentException("SFX 스텁이 64비트 PE가 아닙니다.")
+        }
+    }
+
+    private fun readLe16(bytes: ByteArray, offset: Int): Int {
+        return (bytes[offset].toInt() and 0xFF) or ((bytes[offset + 1].toInt() and 0xFF) shl 8)
+    }
+
+    private fun readLe32(bytes: ByteArray, offset: Int): Int {
+        return readLe16(bytes, offset) or (readLe16(bytes, offset + 2) shl 16)
     }
 
     fun requirePayload(payload: ByteArray) {
@@ -193,18 +222,18 @@ object WindowsSfxPack {
             throw IllegalStateException("SFX 컴파일 폴더를 만들지 못했습니다: ${workDir.absolutePath}")
         }
         val manifest = File(workDir, "stub.manifest")
-        manifest.writeText(LONG_PATH_MANIFEST, StandardCharsets.US_ASCII)
+        writeToolText(manifest, LONG_PATH_MANIFEST, utf16 = false)
+        val msvc = findVcVars64()
         val resource = if (iconFile != null) {
             if (!iconFile.isFile) {
                 throw IllegalStateException("SFX 아이콘이 없습니다: ${iconFile.absolutePath}")
             }
             val rc = File(workDir, "stub.rc")
-            rc.writeText(iconResourceScript(iconFile, manifest), StandardCharsets.US_ASCII)
+            writeToolText(rc, iconResourceScript(iconFile, manifest), utf16 = msvc != null)
             rc
         } else {
             null
         }
-        val msvc = findVcVars64()
         if (msvc != null) {
             compileWithMsvc(msvc, sources, resource, includeDir, workDir, destination)
         } else {
@@ -214,7 +243,21 @@ object WindowsSfxPack {
         if (!destination.isFile) {
             throw IllegalStateException("SFX 스텁이 만들어지지 않았습니다: ${destination.absolutePath}")
         }
+        requireX64Pe(destination.readBytes())
         return destination
+    }
+
+    /** rc.exe와 cl 응답 파일은 UTF-16 LE BOM, windres는 UTF-8을 읽는다. US_ASCII는 한글 경로를 ?로 바꾼다. */
+    fun writeToolText(file: File, text: String, utf16: Boolean) {
+        if (!utf16) {
+            file.writeText(text, StandardCharsets.UTF_8)
+            return
+        }
+        file.outputStream().use { out ->
+            out.write(0xFF)
+            out.write(0xFE)
+            out.write(text.toByteArray(StandardCharsets.UTF_16LE))
+        }
     }
 
     fun pack(
@@ -280,18 +323,19 @@ object WindowsSfxPack {
         workDir: File,
         destination: File,
     ) {
+        val log = File(workDir, "vcvars.log")
         val resource = if (resourceScript != null) {
             val compiled = File(workDir, "stub.res")
-            val script = File(workDir, "compile-resource.cmd")
-            script.writeText(
-                "@echo off\r\n" +
-                    "call \"${vcvars.absolutePath}\" > \"${File(workDir, "vcvars.log").absolutePath}\" 2>&1\r\n" +
-                    "if errorlevel 1 exit /b 1\r\n" +
-                    "rc /nologo /fo \"${compiled.absolutePath}\" \"${resourceScript.absolutePath}\"\r\n" +
-                    "exit /b %ERRORLEVEL%\r\n",
-                StandardCharsets.US_ASCII,
+            runProcess(
+                listOf(
+                    "cmd.exe",
+                    "/c",
+                    "call \"${vcvars.absolutePath}\" > \"${log.absolutePath}\" 2>&1 && " +
+                        "rc /nologo /fo \"${compiled.absolutePath}\" \"${resourceScript.absolutePath}\"",
+                ),
+                workDir,
+                "리소스 컴파일이 실패했습니다",
             )
-            runProcess(listOf("cmd.exe", "/c", script.absolutePath), workDir, "리소스 컴파일이 실패했습니다")
             compiled
         } else {
             null
@@ -312,21 +356,22 @@ object WindowsSfxPack {
         lines += "/link"
         lines += "/SUBSYSTEM:WINDOWS"
         lines += "/ENTRY:wWinMainCRTStartup"
+        lines += "user32.lib"
+        lines += "gdi32.lib"
         lines += "comctl32.lib"
         if (resource != null) {
             lines += "\"${resource.absolutePath}\""
         }
-        response.writeText(lines.joinToString("\r\n") + "\r\n", StandardCharsets.US_ASCII)
-        val script = File(workDir, "compile-stub.cmd")
-        script.writeText(
-            "@echo off\r\n" +
-                "call \"${vcvars.absolutePath}\" > \"${File(workDir, "vcvars.log").absolutePath}\" 2>&1\r\n" +
-                "if errorlevel 1 exit /b 1\r\n" +
-                "cl @\"${response.absolutePath}\"\r\n" +
-                "exit /b %ERRORLEVEL%\r\n",
-            StandardCharsets.US_ASCII,
+        writeToolText(response, lines.joinToString("\r\n") + "\r\n", utf16 = true)
+        runProcess(
+            listOf(
+                "cmd.exe",
+                "/c",
+                "call \"${vcvars.absolutePath}\" > \"${log.absolutePath}\" 2>&1 && cl @\"${response.absolutePath}\"",
+            ),
+            workDir,
+            "SFX 스텁을 컴파일하지 못했습니다",
         )
-        runProcess(listOf("cmd.exe", "/c", script.absolutePath), workDir, "SFX 스텁을 컴파일하지 못했습니다")
     }
 
     private fun compileWithMingw(
@@ -353,6 +398,7 @@ object WindowsSfxPack {
             "-O2",
             "-s",
             "-static",
+            "-m64",
             "-mwindows",
             "-municode",
             "-D_7ZIP_ST",
@@ -365,7 +411,7 @@ object WindowsSfxPack {
         if (resource != null) {
             command += resource.absolutePath
         }
-        command += "-lcomctl32"
+        command += listOf("-luser32", "-lgdi32", "-lcomctl32")
         runProcess(command, workDir, "SFX 스텁을 컴파일하지 못했습니다")
     }
 

@@ -214,7 +214,6 @@ tasks.register("packageWindowsSfx") {
     val icon = InstallerAppIcon.fileFor("windows", project.projectDir)
     inputs.file(icon)
     inputs.file(WindowsSfxPack.stubSource(project.projectDir))
-    inputs.files(WindowsSfxPack.decoderSources(project.projectDir))
     inputs.dir(WindowsSfxPack.lzmaSdkDir(project.projectDir))
     inputs.dir(installerAppImageDir)
     inputs.property("version", providers.provider { project.version.toString() })
@@ -287,23 +286,6 @@ fun deleteExistingDirectory(directory: File, failure: String) {
     val deadline = System.nanoTime() + 15_000_000_000L
     var remaining: File? = null
     while (true) {
-        if (System.getProperty("os.name").lowercase().contains("windows")) {
-            try {
-                ProcessBuilder(
-                    listOf(
-                        "attrib.exe",
-                        "-r",
-                        "-s",
-                        "-h",
-                        "/s",
-                        "/d",
-                        directory.absolutePath,
-                    ),
-                ).redirectErrorStream(true).redirectOutput(ProcessBuilder.Redirect.DISCARD).start().waitFor()
-            } catch (_: java.io.IOException) {
-                // attrib가 없어도 아래 삭제는 그대로 시도한다.
-            }
-        }
         remaining = deleteTree(directory)
         if (!directory.exists()) {
             return
