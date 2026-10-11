@@ -4,7 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>RobotMC 설치기</title>
-  <meta name="description" content="RobotMC 설치기를 운영체제에 맞게 받아요.">
+  <meta name="description" content="RobotMC 설치기의 최신 릴리스를 받아요.">
   <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='6' fill='%23221C16'/%3E%3Crect x='8' y='8' width='16' height='16' rx='2' fill='%238BD17C'/%3E%3C/svg%3E">
   <style>
     :root {
@@ -46,22 +46,33 @@
 
     p {
       margin: 0.6rem 0;
+      line-break: strict;
+      word-break: keep-all;
+    }
+
+    .lede,
+    .note {
+      color: var(--muted);
     }
 
     .lede {
-      color: var(--muted);
       font-size: 1.05rem;
     }
 
     .downloads {
       display: grid;
-      gap: 0.75rem;
+      gap: 1.25rem;
       margin: 1rem 0 0;
       padding: 0;
       list-style: none;
     }
 
-    .downloads a {
+    .downloads li {
+      display: grid;
+      gap: 0.45rem;
+    }
+
+    a.download {
       display: flex;
       justify-content: space-between;
       align-items: baseline;
@@ -74,7 +85,8 @@
       font-weight: 650;
     }
 
-    .downloads a:focus-visible {
+    a.download:focus-visible,
+    a.guide:focus-visible {
       outline: 3px solid var(--text);
       outline-offset: 2px;
     }
@@ -84,8 +96,8 @@
       font-size: 0.85rem;
     }
 
-    .note {
-      color: var(--muted);
+    a.guide {
+      color: var(--primary);
     }
 
     code {
@@ -93,6 +105,7 @@
       border-radius: 6px;
       background: var(--surface);
       color: var(--text);
+      overflow-wrap: anywhere;
     }
   </style>
 </head>
@@ -102,28 +115,83 @@
     <p class="lede">마인크래프트에서 서버에 접속하는 데 필요한 파일을 설치하거나 제거하는 프로그램이에요.</p>
 
     <h2>다운로드</h2>
-    <p>1.0.3 파일을 운영체제에 맞게 받아 주세요.</p>
+    <p id="release-version">최신 버전을 확인하는 중이에요.</p>
     <ul class="downloads">
       <li>
-        <a href="https://github.com/robot-server/robotmc-installer/releases/download/v1.0.3/robotmc-installer-1.0.3.exe">
+        <a class="download" data-asset-suffix=".exe" href="https://github.com/robot-server/robotmc-installer/releases/latest">
           <span>Windows</span>
-          <span class="file">robotmc-installer-1.0.3.exe</span>
+          <span class="file">최신 릴리스</span>
         </a>
+        <p class="note">서명이 없어서 스마트 앱 컨트롤(SAC)이 켜져 있으면 실행이 막힐 수 있어요.<br>Windows 보안의 앱 &amp; 브라우저 컨트롤에서 스마트 앱 컨트롤을 꺼 주세요.<br>꺼도 Windows의 PC 보호가 뜨면 추가 정보를 누른 뒤 실행해 주세요.</p>
       </li>
       <li>
-        <a href="https://github.com/robot-server/robotmc-installer/releases/download/v1.0.3/robotmc-installer-1.0.3.jar">
-          <span>macOS</span>
-          <span class="file">robotmc-installer-1.0.3.jar</span>
+        <a class="download" data-asset-suffix=".jar" href="https://github.com/robot-server/robotmc-installer/releases/latest">
+          <span>Universal</span>
+          <span class="file">최신 릴리스</span>
         </a>
-      </li>
-      <li>
-        <a href="https://github.com/robot-server/robotmc-installer/releases/download/v1.0.3/robotmc-installer-1.0.3.jar">
-          <span>Linux</span>
-          <span class="file">robotmc-installer-1.0.3.jar</span>
-        </a>
+        <p class="note">Java 25 JRE가 필요해요. 없으면 <a class="guide" href="https://adoptium.net/temurin/releases/?version=25&amp;package=jre">Eclipse Temurin JRE</a>를 설치해 주세요.<br>받은 폴더에서 이 명령으로 실행해요.<br><code id="jar-command">실행 명령을 확인하는 중이에요.</code></p>
       </li>
     </ul>
-    <p class="note">Windows는 받은 파일을 실행하면 설치기가 열려요. macOS와 Linux는 터미널에서 <code>java -jar</code> 뒤에 받은 파일 이름을 붙여 실행해요.</p>
   </main>
+  <script>
+    (function () {
+      var api = "https://api.github.com/repos/robot-server/robotmc-installer/releases/latest";
+      var releases = "https://github.com/robot-server/robotmc-installer/releases/";
+      var status = document.getElementById("release-version");
+      var command = document.getElementById("jar-command");
+      var controller = new AbortController();
+      var timer = setTimeout(function () { controller.abort(); }, 8000);
+
+      function showCommand(name) {
+        if (!command) return;
+        command.textContent = name ? "java -jar " + name : "java -jar robotmc-installer-<버전>.jar";
+      }
+
+      function fallbackJarName(tag) {
+        if (!tag || tag.charAt(0) !== "v" || tag.length < 2) return "";
+        return "robotmc-installer-" + tag.slice(1) + ".jar";
+      }
+
+      fetch(api, { signal: controller.signal }).then(function (response) {
+        if (!response.ok) throw new Error("release");
+        return response.json();
+      }).then(function (release) {
+        var tag = release && release.tag_name ? release.tag_name : "";
+        var assets = release && release.assets ? release.assets : [];
+        var links = document.querySelectorAll("a[data-asset-suffix]");
+        var jarName = "";
+        for (var i = 0; i < links.length; i++) {
+          var link = links[i];
+          var suffix = link.getAttribute("data-asset-suffix");
+          var asset = null;
+          for (var j = 0; j < assets.length; j++) {
+            var name = assets[j].name || "";
+            var url = assets[j].browser_download_url || "";
+            if (name.indexOf("robotmc-installer-") === 0 &&
+                name.slice(-suffix.length) === suffix &&
+                url.indexOf(releases) === 0 &&
+                url.slice(-suffix.length) === suffix) {
+              asset = assets[j];
+              break;
+            }
+          }
+          if (!asset) continue;
+          link.href = asset.browser_download_url;
+          var file = link.querySelector(".file");
+          if (file) file.textContent = asset.name;
+          if (suffix === ".jar") jarName = asset.name;
+        }
+        showCommand(jarName || fallbackJarName(tag));
+        if (status) {
+          status.textContent = tag ? "최신 버전: " + tag : "최신 릴리스 목록에서 받아 주세요.";
+        }
+      }).catch(function () {
+        showCommand("");
+        if (status) status.textContent = "최신 릴리스 목록에서 받아 주세요.";
+      }).then(function () {
+        clearTimeout(timer);
+      });
+    })();
+  </script>
 </body>
 </html>
