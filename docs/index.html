@@ -4,44 +4,145 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>RobotMC 설치기</title>
-  <meta name="description" content="RobotMC 설치기의 최신 릴리스를 받아요.">
-  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='6' fill='%23221C16'/%3E%3Crect x='8' y='8' width='16' height='16' rx='2' fill='%238BD17C'/%3E%3C/svg%3E">
+  <meta name="description" content="마인크래프트에서 서버에 접속하는 데 필요한 파일을 설치하거나 제거하는 프로그램이에요.">
+  <meta name="theme-color" content="#221C16">
+  <meta property="og:type" content="website">
+  <meta property="og:url" content="https://robot-server.github.io/robotmc-installer/">
+  <meta property="og:title" content="RobotMC 설치기">
+  <meta property="og:description" content="마인크래프트에서 서버에 접속하는 데 필요한 파일을 설치하거나 제거하는 프로그램이에요.">
+  <meta property="og:image" content="https://robot-server.github.io/robotmc-installer/icon.png">
+  <meta name="twitter:card" content="summary">
+  <link rel="icon" href="icon.png" type="image/png">
+  <link rel="apple-touch-icon" href="icon.png">
+  <link rel="preconnect" href="https://api.github.com" crossorigin>
   <style>
     :root {
       color-scheme: dark;
       --bg: #221C16;
+      --bg-raised: #2C261F;
       --text: #F3EEE6;
       --muted: #C4B8A8;
       --primary: #8BD17C;
       --on-primary: #10210E;
       --surface: #3A3128;
+      --line: #4A4036;
+    }
+
+    *,
+    *::before,
+    *::after {
+      box-sizing: border-box;
     }
 
     body {
       margin: 0;
       min-height: 100vh;
-      background: var(--bg);
+      background:
+        radial-gradient(ellipse 72% 48% at 88% -8%, rgba(139, 209, 124, 0.16), transparent 56%),
+        var(--bg);
       color: var(--text);
       font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
       line-height: 1.55;
     }
 
-    main {
-      box-sizing: border-box;
-      max-width: 36rem;
-      margin: 0 auto;
-      padding: 3.5rem 1.5rem 4rem;
+    a:focus-visible {
+      outline: 3px solid var(--text);
+      outline-offset: 2px;
     }
 
-    h1 {
-      margin: 0 0 0.75rem;
-      font-size: 2rem;
+    .wrap {
+      width: min(68rem, calc(100% - 3rem));
+      margin-inline: auto;
+    }
+
+    .top {
+      position: sticky;
+      top: 0;
+      z-index: 10;
+      background: rgba(34, 28, 22, 0.9);
+      backdrop-filter: blur(16px);
+      border-bottom: 1px solid rgba(74, 64, 54, 0.7);
+    }
+
+    .bar {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 1rem;
+      min-height: 4.25rem;
+    }
+
+    a.brand {
+      display: flex;
+      align-items: center;
+      gap: 0.7rem;
+      color: var(--text);
+      text-decoration: none;
+      font-weight: 650;
       letter-spacing: -0.02em;
     }
 
+    a.brand img {
+      width: 32px;
+      height: 32px;
+      image-rendering: pixelated;
+    }
+
+    a.nav {
+      padding: 0.4rem 0.85rem;
+      border: 1px solid var(--line);
+      border-radius: 999px;
+      color: var(--text);
+      text-decoration: none;
+      font-weight: 600;
+      font-size: 0.95rem;
+    }
+
+    a.nav:hover {
+      border-color: var(--primary);
+      color: var(--primary);
+    }
+
+    .hero {
+      display: grid;
+      grid-template-columns: minmax(0, 1.4fr) auto;
+      align-items: center;
+      gap: 3rem;
+      padding: 4.5rem 0 3.25rem;
+    }
+
+    h1, h2, h3 {
+      line-break: strict;
+      word-break: keep-all;
+    }
+
+    h1 {
+      margin: 0;
+      font-size: clamp(3rem, 7vw, 5rem);
+      line-height: 1.05;
+      letter-spacing: -0.04em;
+    }
+
+    h1::after {
+      content: "";
+      display: block;
+      width: 7.5rem;
+      height: 0.55rem;
+      margin-top: 1.15rem;
+      border-radius: 2px;
+      background: linear-gradient(90deg, var(--primary) 72%, var(--surface) 72%);
+    }
+
     h2 {
-      margin: 2rem 0 0.75rem;
-      font-size: 1.15rem;
+      margin: 0;
+      font-size: clamp(1.45rem, 2vw, 1.8rem);
+      letter-spacing: -0.03em;
+    }
+
+    h3 {
+      margin: 0 0 0.45rem;
+      font-size: 1.05rem;
+      letter-spacing: -0.02em;
     }
 
     p {
@@ -50,33 +151,85 @@
       word-break: keep-all;
     }
 
-    .lede,
-    .note {
+    .lede {
+      max-width: 36rem;
+      margin: 1.35rem 0 0;
+      color: var(--muted);
+      font-size: 1.2rem;
+    }
+
+    .hero-mark {
+      width: 256px;
+      height: 256px;
+      image-rendering: pixelated;
+      filter: drop-shadow(0 22px 36px rgba(0, 0, 0, 0.4));
+    }
+
+    #download {
+      scroll-margin-top: 4.5rem;
+    }
+
+    .band {
+      padding: 3.25rem 0 3.5rem;
+      background: rgba(28, 23, 18, 0.72);
+      border-block: 1px solid var(--line);
+    }
+
+    .section-head {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: baseline;
+      justify-content: space-between;
+      gap: 0.4rem 1.5rem;
+      margin-bottom: 1.15rem;
+    }
+
+    .section-head > * {
+      min-width: 0;
+      max-width: 100%;
+    }
+
+    #release-version {
+      margin: 0;
       color: var(--muted);
     }
 
-    .lede {
-      font-size: 1.05rem;
-    }
-
-    .downloads {
+    .downloads,
+    .points {
       display: grid;
-      gap: 1.25rem;
-      margin: 1rem 0 0;
+      gap: 1rem;
+      margin: 0;
       padding: 0;
       list-style: none;
     }
 
+    .downloads {
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+
+    .downloads li,
+    .points li {
+      margin: 0;
+      padding: 1.2rem 1.2rem 1.3rem;
+      border: 1px solid var(--line);
+      border-radius: 18px;
+      background: var(--bg-raised);
+    }
+
     .downloads li {
-      display: grid;
-      gap: 0.45rem;
+      display: flex;
+      flex-direction: column;
+      gap: 0.85rem;
+      min-width: 0;
     }
 
     a.download {
       display: flex;
       justify-content: space-between;
-      align-items: baseline;
-      gap: 1rem;
+      align-items: center;
+      flex-wrap: wrap;
+      gap: 0.35rem 1rem;
+      min-width: 0;
       padding: 0.95rem 1.1rem;
       border-radius: 12px;
       background: var(--primary);
@@ -85,15 +238,22 @@
       font-weight: 650;
     }
 
-    a.download:focus-visible,
-    a.guide:focus-visible {
-      outline: 3px solid var(--text);
-      outline-offset: 2px;
+    a.download:hover {
+      filter: brightness(1.06);
     }
 
     .file {
+      min-width: 0;
       font-weight: 500;
       font-size: 0.85rem;
+      text-align: right;
+      overflow-wrap: anywhere;
+    }
+
+    .note {
+      margin: 0;
+      color: var(--muted);
+      font-size: 0.95rem;
     }
 
     a.guide {
@@ -107,32 +267,153 @@
       color: var(--text);
       overflow-wrap: anywhere;
     }
+
+    #jar-command {
+      display: block;
+      max-width: 100%;
+      margin-top: 0.45rem;
+      padding: 0.55rem 0.7rem;
+    }
+
+    .about {
+      padding: 3.5rem 0 4rem;
+    }
+
+    .about h2 {
+      margin-bottom: 1.15rem;
+    }
+
+    .points {
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+    }
+
+    .points p {
+      margin: 0;
+      color: var(--muted);
+    }
+
+    .foot {
+      padding: 0 0 2rem;
+      color: var(--muted);
+      font-size: 0.95rem;
+    }
+
+    .foot-bar {
+      display: flex;
+      flex-wrap: wrap;
+      justify-content: space-between;
+      gap: 0.6rem 1.5rem;
+      padding-top: 1.25rem;
+      border-top: 1px solid var(--line);
+    }
+
+    @media (max-width: 800px) {
+      .hero {
+        grid-template-columns: 1fr;
+        gap: 1.5rem;
+        padding: 2.75rem 0 2.25rem;
+      }
+
+      .hero-mark {
+        width: 128px;
+        height: 128px;
+        order: -1;
+      }
+
+      .section-head {
+        flex-direction: column;
+        align-items: flex-start;
+      }
+
+      .downloads,
+      .points {
+        grid-template-columns: 1fr;
+      }
+
+      a.download {
+        flex-direction: column;
+        align-items: flex-start;
+      }
+
+      .file {
+        text-align: left;
+      }
+    }
   </style>
 </head>
 <body>
-  <main>
-    <h1>RobotMC 설치기</h1>
-    <p class="lede">마인크래프트에서 서버에 접속하는 데 필요한 파일을 설치하거나 제거하는 프로그램이에요.</p>
+  <header class="top">
+    <div class="wrap bar">
+      <a class="brand" href="#">
+        <img src="icon.png" alt="" width="32" height="32">
+        <span>RobotMC 설치기</span>
+      </a>
+      <a class="nav" href="#download">다운로드</a>
+    </div>
+  </header>
 
-    <h2>다운로드</h2>
-    <p id="release-version">최신 버전을 확인하는 중이에요.</p>
-    <ul class="downloads">
-      <li>
-        <a class="download" data-asset-suffix=".exe" href="https://github.com/robot-server/robotmc-installer/releases/latest">
-          <span>Windows</span>
-          <span class="file">최신 릴리스</span>
-        </a>
-        <p class="note">서명이 없어서 스마트 앱 컨트롤(SAC)이 켜져 있으면 실행이 막힐 수 있어요.<br>Windows 보안의 앱 &amp; 브라우저 컨트롤에서 스마트 앱 컨트롤을 꺼 주세요.<br>꺼도 Windows의 PC 보호가 뜨면 추가 정보를 누른 뒤 실행해 주세요.</p>
-      </li>
-      <li>
-        <a class="download" data-asset-suffix=".jar" href="https://github.com/robot-server/robotmc-installer/releases/latest">
-          <span>Universal</span>
-          <span class="file">최신 릴리스</span>
-        </a>
-        <p class="note">Java 25 JRE가 필요해요. 없으면 <a class="guide" href="https://adoptium.net/temurin/releases/?version=25&amp;package=jre">Eclipse Temurin JRE</a>를 설치해 주세요.<br>받은 폴더에서 이 명령으로 실행해요.<br><code id="jar-command">실행 명령을 확인하는 중이에요.</code></p>
-      </li>
-    </ul>
+  <main>
+    <section class="hero wrap">
+      <div>
+        <h1>RobotMC 설치기</h1>
+        <p class="lede">마인크래프트에서 서버에 접속하는 데 필요한 파일을 설치하거나 제거하는 프로그램이에요.</p>
+      </div>
+      <img class="hero-mark" src="icon.png" alt="" width="256" height="256">
+    </section>
+
+    <section id="download" class="band">
+      <div class="wrap">
+        <div class="section-head">
+          <h2>다운로드</h2>
+          <p id="release-version">최신 버전을 확인하는 중이에요.</p>
+        </div>
+        <ul class="downloads">
+          <li>
+            <a class="download" data-asset-suffix=".exe" href="https://github.com/robot-server/robotmc-installer/releases/latest">
+              <span>Windows</span>
+              <span class="file">최신 릴리스</span>
+            </a>
+            <p class="note">서명이 없어서 스마트 앱 컨트롤(SAC)이 켜져 있으면 실행이 막힐 수 있어요.<br>Windows 보안의 앱 &amp; 브라우저 컨트롤에서 스마트 앱 컨트롤을 꺼 주세요.<br>꺼도 Windows의 PC 보호가 뜨면 추가 정보를 누른 뒤 실행해 주세요.</p>
+          </li>
+          <li>
+            <a class="download" data-asset-suffix=".jar" href="https://github.com/robot-server/robotmc-installer/releases/latest">
+              <span>Universal</span>
+              <span class="file">최신 릴리스</span>
+            </a>
+            <p class="note">Java 25 JRE가 필요해요. 없으면 <a class="guide" href="https://adoptium.net/temurin/releases/?version=25&amp;package=jre">Eclipse Temurin JRE</a>를 설치해 주세요.<br>받은 폴더에서 이 명령으로 실행해요.<code id="jar-command">실행 명령을 확인하는 중이에요.</code></p>
+          </li>
+        </ul>
+      </div>
+    </section>
+
+    <section class="about" aria-labelledby="about-title">
+      <div class="wrap">
+        <h2 id="about-title">설치기가 하는 일</h2>
+        <ul class="points">
+          <li>
+            <h3>설치</h3>
+            <p>서버에 접속하는 데 필요한 파일을 설치해요.</p>
+          </li>
+          <li>
+            <h3>제거</h3>
+            <p>설치한 파일을 다시 뺄 수 있어요.<br>세이브는 그대로 둬요.</p>
+          </li>
+          <li>
+            <h3>받는 파일</h3>
+            <p>Windows는 실행 파일로 받아요.<br>Universal은 Windows, macOS, Linux에서 쓸 수 있어요.</p>
+          </li>
+        </ul>
+      </div>
+    </section>
   </main>
+
+  <footer class="foot">
+    <div class="wrap foot-bar">
+      <span>RobotMC 설치기</span>
+      <a class="guide" href="https://github.com/robot-server/robotmc-installer/releases">릴리스 목록</a>
+    </div>
+  </footer>
+
   <script>
     (function () {
       var api = "https://api.github.com/repos/robot-server/robotmc-installer/releases/latest";
