@@ -1,0 +1,129 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>RobotMC 설치기</title>
+  <meta name="description" content="RobotMC 설치기를 운영체제에 맞게 받아요.">
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='6' fill='%23221C16'/%3E%3Crect x='8' y='8' width='16' height='16' rx='2' fill='%238BD17C'/%3E%3C/svg%3E">
+  <style>
+    :root {
+      color-scheme: dark;
+      --bg: #221C16;
+      --text: #F3EEE6;
+      --muted: #C4B8A8;
+      --primary: #8BD17C;
+      --on-primary: #10210E;
+      --surface: #3A3128;
+    }
+
+    body {
+      margin: 0;
+      min-height: 100vh;
+      background: var(--bg);
+      color: var(--text);
+      font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
+      line-height: 1.55;
+    }
+
+    main {
+      box-sizing: border-box;
+      max-width: 36rem;
+      margin: 0 auto;
+      padding: 3.5rem 1.5rem 4rem;
+    }
+
+    h1 {
+      margin: 0 0 0.75rem;
+      font-size: 2rem;
+      letter-spacing: -0.02em;
+    }
+
+    h2 {
+      margin: 2rem 0 0.75rem;
+      font-size: 1.15rem;
+    }
+
+    p {
+      margin: 0.6rem 0;
+    }
+
+    .lede {
+      color: var(--muted);
+      font-size: 1.05rem;
+    }
+
+    .downloads {
+      display: grid;
+      gap: 0.75rem;
+      margin: 1rem 0 0;
+      padding: 0;
+      list-style: none;
+    }
+
+    .downloads a {
+      display: flex;
+      justify-content: space-between;
+      align-items: baseline;
+      gap: 1rem;
+      padding: 0.95rem 1.1rem;
+      border-radius: 12px;
+      background: var(--primary);
+      color: var(--on-primary);
+      text-decoration: none;
+      font-weight: 650;
+    }
+
+    .downloads a:focus-visible {
+      outline: 3px solid var(--text);
+      outline-offset: 2px;
+    }
+
+    .file {
+      font-weight: 500;
+      font-size: 0.85rem;
+    }
+
+    .note {
+      color: var(--muted);
+    }
+
+    code {
+      padding: 0.1rem 0.35rem;
+      border-radius: 6px;
+      background: var(--surface);
+      color: var(--text);
+    }
+  </style>
+</head>
+<body>
+  <main>
+    <h1>RobotMC 설치기</h1>
+    <p class="lede">마인크래프트에서 서버에 접속하는 데 필요한 파일을 설치하거나 제거하는 프로그램이에요.</p>
+
+    <h2>다운로드</h2>
+    <p>1.0.3 파일을 운영체제에 맞게 받아 주세요.</p>
+    <ul class="downloads">
+      <li>
+        <a href="https://github.com/robot-server/robotmc-installer/releases/download/v1.0.3/robotmc-installer-1.0.3.exe">
+          <span>Windows</span>
+          <span class="file">robotmc-installer-1.0.3.exe</span>
+        </a>
+      </li>
+      <li>
+        <a href="https://github.com/robot-server/robotmc-installer/releases/download/v1.0.3/robotmc-installer-1.0.3.jar">
+          <span>macOS</span>
+          <span class="file">robotmc-installer-1.0.3.jar</span>
+        </a>
+      </li>
+      <li>
+        <a href="https://github.com/robot-server/robotmc-installer/releases/download/v1.0.3/robotmc-installer-1.0.3.jar">
+          <span>Linux</span>
+          <span class="file">robotmc-installer-1.0.3.jar</span>
+        </a>
+      </li>
+    </ul>
+    <p class="note">Windows는 받은 파일을 실행하면 설치기가 열려요. macOS와 Linux는 터미널에서 <code>java -jar</code> 뒤에 받은 파일 이름을 붙여 실행해요.</p>
+  </main>
+</body>
+</html>
