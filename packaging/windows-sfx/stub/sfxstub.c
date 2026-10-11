@@ -13,7 +13,17 @@ Launch name: RobotMC Installer.exe
 #include "7zCrc.h"
 
 #include <windows.h>
+#include <commctrl.h>
+#include <process.h>
 #include <stdio.h>
+
+#pragma comment(lib, "comctl32.lib")
+
+#define SFX_ID_PROGRESS 100
+#define SFX_ID_CANCEL 101
+/* 창 제목과 본문: 압축 푸는 중. 버튼: 취소. */
+#define SFX_EXTRACT_TITLE L"\xC555\xCD95 \xD478\xB294 \xC911"
+#define SFX_CANCEL_LABEL L"\xCDE8\xC18C"
 
 #define SFX_INSTALL_DIR_NAME L"RobotMC Installer"
 #define SFX_LAUNCHER_NAME L"RobotMC Installer.exe"
@@ -21,6 +31,12 @@ Launch name: RobotMC Installer.exe
 #define SFX_PATH_CAP 32768
 
 static const ISzAlloc g_Alloc = { SzAlloc, SzFree };
+static volatile LONG g_Cancel = 0;
+static volatile LONGLONG g_BytesRead = 0;
+static volatile LONGLONG g_ArchiveBytes = 0;
+static HWND g_ExtractWindow = NULL;
+static HWND g_ProgressBar = NULL;
+static HFONT g_ExtractFont = NULL;
 
 typedef struct
 {
@@ -179,6 +195,8 @@ static SRes OverlayRead(ISeekInStreamPtr pp, void *buf, size_t *size)
   LARGE_INTEGER pos;
   DWORD read = 0;
 
+  if (g_Cancel)
+    return SZ_ERROR_READ;
   if (p->pos >= p->size)
   {
     *size = 0;
@@ -196,6 +214,7 @@ static SRes OverlayRead(ISeekInStreamPtr pp, void *buf, size_t *size)
   if (!ReadFile(p->file, buf, (DWORD)toRead, &read, NULL))
     return SZ_ERROR_READ;
   p->pos += read;
+  g_BytesRead += (LONGLONG)read;
   *size = read;
   return SZ_OK;
 }
@@ -339,6 +358,152 @@ static int WriteExtractedFile(const wchar_t *path, const Byte *data, size_t size
   return 1;
 }
 
+static LRESULT CALLBACK ExtractWndProc(HWND window, UINT message, WPARAM wParam, LPARAM lParam)
+{
+  if (message == WM_COMMAND && LOWORD(wParam) == SFX_ID_CANCEL)
+  {
+    g_Cancel = 1;
+    EnableWindow(GetDlgItem(window, SFX_ID_CANCEL), FALSE);
+    return 0;
+  }
+  if (message == WM_CLOSE)
+  {
+    g_Cancel = 1;
+    EnableWindow(GetDlgItem(window, SFX_ID_CANCEL), FALSE);
+    return 0;
+  }
+  return DefWindowProcW(window, message, wParam, lParam);
+}
+
+static HFONT ExtractFont(void)
+{
+  NONCLIENTMETRICS metrics;
+  if (g_ExtractFont)
+    return g_ExtractFont;
+  memset(&metrics, 0, sizeof metrics);
+  metrics.cbSize = sizeof metrics;
+  if (SystemParametersInfoW(SPI_GETNONCLIENTMETRICS, sizeof metrics, &metrics, 0))
+  {
+    metrics.lfMessageFont.lfWeight = FW_NORMAL;
+    metrics.lfMessageFont.lfItalic = FALSE;
+    g_ExtractFont = CreateFontIndirectW(&metrics.lfMessageFont);
+  }
+  if (!g_ExtractFont)
+  {
+    g_ExtractFont = CreateFontW(
+        -15, 0, 0, 0, FW_NORMAL, FALSE, FALSE, FALSE,
+        DEFAULT_CHARSET, OUT_DEFAULT_PRECIS, CLIP_DEFAULT_PRECIS,
+        CLEARTYPE_QUALITY, DEFAULT_PITCH | FF_DONTCARE, L"Segoe UI");
+  }
+  return g_ExtractFont;
+}
+
+static void RefreshExtractProgress(void)
+{
+  LONGLONG total = g_ArchiveBytes;
+  LONGLONG done = g_BytesRead;
+  LONGLONG value;
+  if (!g_ProgressBar || total <= 0)
+    return;
+  if (done < 0)
+    done = 0;
+  if (done > total)
+    done = total;
+  value = (done * 990) / total;
+  SendMessageW(g_ProgressBar, PBM_SETPOS, (WPARAM)value, 0);
+}
+
+static void ShowExtractWindow(void)
+{
+  INITCOMMONCONTROLSEX controls;
+  WNDCLASSW windowClass;
+  HINSTANCE instance = GetModuleHandleW(NULL);
+  RECT work;
+  RECT bounds;
+  DWORD style = WS_OVERLAPPED | WS_CAPTION | WS_SYSMENU;
+  DWORD exStyle = WS_EX_DLGMODALFRAME;
+  HFONT font;
+  HWND label;
+  HWND cancel;
+  int width;
+  int height;
+  int x;
+  int y;
+
+  controls.dwSize = sizeof controls;
+  controls.dwICC = ICC_PROGRESS_CLASS;
+  InitCommonControlsEx(&controls);
+  memset(&windowClass, 0, sizeof windowClass);
+  windowClass.lpfnWndProc = ExtractWndProc;
+  windowClass.hInstance = instance;
+  windowClass.hCursor = LoadCursorW(NULL, IDC_ARROW);
+  windowClass.hbrBackground = (HBRUSH)(COLOR_BTNFACE + 1);
+  windowClass.lpszClassName = L"RobotMCSfxExtract";
+  windowClass.hIcon = LoadIconW(instance, MAKEINTRESOURCEW(1));
+  RegisterClassW(&windowClass);
+  SystemParametersInfoW(SPI_GETWORKAREA, 0, &work, 0);
+  bounds.left = 0;
+  bounds.top = 0;
+  bounds.right = 440;
+  bounds.bottom = 132;
+  AdjustWindowRectEx(&bounds, style, FALSE, exStyle);
+  width = bounds.right - bounds.left;
+  height = bounds.bottom - bounds.top;
+  x = work.left + ((work.right - work.left) - width) / 2;
+  y = work.top + ((work.bottom - work.top) - height) / 2;
+  g_ExtractWindow = CreateWindowExW(
+      exStyle, windowClass.lpszClassName, SFX_EXTRACT_TITLE, style,
+      x, y, width, height, NULL, NULL, instance, NULL);
+  if (!g_ExtractWindow)
+    return;
+  font = ExtractFont();
+  label = CreateWindowExW(0, L"STATIC", SFX_EXTRACT_TITLE, WS_CHILD | WS_VISIBLE,
+      18, 16, 400, 24, g_ExtractWindow, NULL, instance, NULL);
+  g_ProgressBar = CreateWindowExW(0, PROGRESS_CLASSW, NULL,
+      WS_CHILD | WS_VISIBLE | PBS_SMOOTH,
+      18, 48, 404, 18, g_ExtractWindow, (HMENU)(UINT_PTR)SFX_ID_PROGRESS, instance, NULL);
+  cancel = CreateWindowExW(0, L"BUTTON", SFX_CANCEL_LABEL, WS_CHILD | WS_VISIBLE | WS_TABSTOP,
+      320, 80, 100, 26, g_ExtractWindow, (HMENU)(UINT_PTR)SFX_ID_CANCEL, instance, NULL);
+  SendMessageW(label, WM_SETFONT, (WPARAM)font, FALSE);
+  SendMessageW(cancel, WM_SETFONT, (WPARAM)font, FALSE);
+  SendMessageW(g_ProgressBar, PBM_SETRANGE32, 0, 1000);
+  SendMessageW(g_ProgressBar, PBM_SETPOS, 0, 0);
+  ShowWindow(g_ExtractWindow, SW_SHOWNORMAL);
+  UpdateWindow(g_ExtractWindow);
+}
+
+static void CloseExtractWindow(HANDLE done)
+{
+  if (!g_ExtractWindow)
+  {
+    WaitForSingleObject(done, INFINITE);
+    return;
+  }
+  for (;;)
+  {
+    DWORD wait = MsgWaitForMultipleObjects(1, &done, FALSE, 100, QS_ALLINPUT);
+    MSG message;
+    while (PeekMessageW(&message, NULL, 0, 0, PM_REMOVE))
+    {
+      TranslateMessage(&message);
+      DispatchMessageW(&message);
+    }
+    RefreshExtractProgress();
+    if (wait == WAIT_OBJECT_0)
+      break;
+  }
+  if (!g_Cancel && g_ProgressBar)
+    SendMessageW(g_ProgressBar, PBM_SETPOS, 1000, 0);
+  DestroyWindow(g_ExtractWindow);
+  g_ExtractWindow = NULL;
+  g_ProgressBar = NULL;
+  if (g_ExtractFont)
+  {
+    DeleteObject(g_ExtractFont);
+    g_ExtractFont = NULL;
+  }
+}
+
 static int ExtractAll(CSzArEx *db, ILookInStreamPtr stream, const wchar_t *installDir)
 {
   UInt32 index;
@@ -376,10 +541,20 @@ static int ExtractAll(CSzArEx *db, ILookInStreamPtr stream, const wchar_t *insta
       goto done;
     }
     SzFree(NULL, name);
+    if (g_Cancel)
+    {
+      ok = -1;
+      goto done;
+    }
     if (isDir)
       continue;
     res = SzArEx_Extract(db, stream, index, &blockIndex, &outBuffer, &outBufferSize,
         &offset, &outSize, &g_Alloc, &g_Alloc);
+    if (g_Cancel)
+    {
+      ok = -1;
+      goto done;
+    }
     if (res != SZ_OK)
     {
       wchar_t message[128];
@@ -433,6 +608,35 @@ static int LaunchInstaller(const wchar_t *installDir, DWORD *exitCode)
   return 1;
 }
 
+typedef struct
+{
+  CLookToRead2 *look;
+  CSzArEx *db;
+  const wchar_t *installDir;
+  HANDLE done;
+  int result;
+} CExtractJob;
+
+static unsigned __stdcall ExtractWorker(void *argument)
+{
+  CExtractJob *job = (CExtractJob *)argument;
+  SRes res = SzArEx_Open(job->db, &job->look->vt, &g_Alloc, &g_Alloc);
+  if (g_Cancel)
+    job->result = -1;
+  else if (res != SZ_OK)
+  {
+    wchar_t message[128];
+    swprintf(message, 128, L"cannot open 7z archive (code %d)", (int)res);
+    Report(message);
+    job->result = 0;
+  }
+  else
+    job->result = ExtractAll(job->db, &job->look->vt, job->installDir);
+  if (job->done)
+    SetEvent(job->done);
+  return 0;
+}
+
 static int SfxMain(void)
 {
   wchar_t modulePath[SFX_PATH_CAP];
@@ -445,7 +649,6 @@ static int SfxMain(void)
   CSzArEx db;
   DWORD exitCode = 1;
   int code = 1;
-  SRes res;
   DWORD pathLen = GetModuleFileNameW(NULL, modulePath, SFX_PATH_CAP);
 
   memset(&overlay, 0, sizeof overlay);
@@ -489,21 +692,40 @@ static int SfxMain(void)
     Report(L"out of memory");
     goto done;
   }
-  res = SzArEx_Open(&db, &look.vt, &g_Alloc, &g_Alloc);
-  if (res != SZ_OK)
-  {
-    wchar_t message[128];
-    swprintf(message, 128, L"cannot open 7z archive (code %d)", (int)res);
-    Report(message);
-    goto done;
-  }
   if (!BuildInstallDir(installDir, SFX_PATH_CAP))
   {
     Report(L"LOCALAPPDATA is not set");
     goto done;
   }
-  if (!ExtractAll(&db, &look.vt, installDir))
-    goto done;
+  {
+    CExtractJob job;
+    HANDLE doneEvent = CreateEventW(NULL, TRUE, FALSE, NULL);
+    uintptr_t thread = 0;
+    job.look = &look;
+    job.db = &db;
+    job.installDir = installDir;
+    job.done = doneEvent;
+    job.result = 0;
+    g_Cancel = 0;
+    g_BytesRead = 0;
+    g_ArchiveBytes = (LONGLONG)overlay.size;
+    ShowExtractWindow();
+    if (doneEvent)
+      thread = _beginthreadex(NULL, 0, ExtractWorker, &job, 0, NULL);
+    if (!doneEvent || thread == 0)
+      ExtractWorker(&job);
+    if (doneEvent)
+      CloseExtractWindow(doneEvent);
+    if (thread != 0)
+    {
+      WaitForSingleObject((HANDLE)thread, INFINITE);
+      CloseHandle((HANDLE)thread);
+    }
+    if (doneEvent)
+      CloseHandle(doneEvent);
+    if (job.result != 1)
+      goto done;
+  }
   if (!LaunchInstaller(installDir, &exitCode))
     goto done;
   code = (int)exitCode;

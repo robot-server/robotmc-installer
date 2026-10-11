@@ -312,6 +312,7 @@ object WindowsSfxPack {
         lines += "/link"
         lines += "/SUBSYSTEM:WINDOWS"
         lines += "/ENTRY:wWinMainCRTStartup"
+        lines += "comctl32.lib"
         if (resource != null) {
             lines += "\"${resource.absolutePath}\""
         }
@@ -364,6 +365,7 @@ object WindowsSfxPack {
         if (resource != null) {
             command += resource.absolutePath
         }
+        command += "-lcomctl32"
         runProcess(command, workDir, "SFX 스텁을 컴파일하지 못했습니다")
     }
 
@@ -522,6 +524,11 @@ object WindowsSfxPack {
 
     private const val LONG_PATH_MANIFEST = """<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
 <assembly xmlns="urn:schemas-microsoft-com:asm.v1" manifestVersion="1.0">
+  <dependency>
+    <dependentAssembly>
+      <assemblyIdentity type="win32" name="Microsoft.Windows.Common-Controls" version="6.0.0.0" processorArchitecture="*" publicKeyToken="6595b64144ccf1df" language="*" />
+    </dependentAssembly>
+  </dependency>
   <application xmlns="urn:schemas-microsoft-com:asm.v3">
     <windowsSettings>
       <longPathAware xmlns="http://schemas.microsoft.com/SMI/2016/WindowsSettings">true</longPathAware>
