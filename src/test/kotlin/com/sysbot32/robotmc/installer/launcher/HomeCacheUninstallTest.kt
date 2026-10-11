@@ -191,6 +191,12 @@ class HomeCacheUninstallTest {
         Files.createDirectories(target)
         Files.writeString(target.resolve("keep.txt"), "target")
         Files.createSymbolicLink(home.resolve("outside-link"), target)
+        val nestedTarget = parent.resolve("nested-target")
+        Files.createDirectories(nestedTarget)
+        Files.writeString(nestedTarget.resolve("keep.txt"), "nested")
+        Files.createDirectories(home.resolve("nested"))
+        Files.createSymbolicLink(home.resolve("nested").resolve("dir-link"), nestedTarget)
+        val junctionTarget = createWindowsJunction(home, parent)
         val readonly = home.resolve("readonly.txt")
         Files.writeString(readonly, "locked")
         readonly.toFile().setReadOnly()
@@ -206,12 +212,17 @@ class HomeCacheUninstallTest {
                 assertTrue(child.isAlive, janitorErrors(errors))
                 assertTrue(Files.isRegularFile(jar), janitorErrors(errors))
                 assertEquals("target", Files.readString(target.resolve("keep.txt")))
+                assertEquals("nested", Files.readString(nestedTarget.resolve("keep.txt")))
+                assertJunctionTarget(junctionTarget)
                 Thread.sleep(40)
             }
             child.destroyForcibly()
             assertTrue(child.waitFor(10, java.util.concurrent.TimeUnit.SECONDS))
             awaitAbsent(home, errors)
             assertEquals("target", Files.readString(target.resolve("keep.txt")))
+            assertEquals("nested", Files.readString(nestedTarget.resolve("keep.txt")))
+            assertTrue(Files.isDirectory(nestedTarget))
+            assertJunctionTarget(junctionTarget)
             assertRealHomeUnchanged(existed)
         } finally {
             child.destroyForcibly()
@@ -415,6 +426,38 @@ class HomeCacheUninstallTest {
             Thread.sleep(50)
         }
         fail("$path was not removed\n${janitorErrors(errorLog)}")
+    }
+
+    /**
+     * Windows에서는 junction을 만든다. 그 외에는 junction이 없고, 디렉터리 심볼릭 링크가 같은 경우다.
+     */
+    private fun createWindowsJunction(home: Path, parent: Path): Path? {
+        if (!System.getProperty("os.name", "").lowercase().startsWith("windows")) {
+            return null
+        }
+        val junctionTarget = parent.resolve("junction-target")
+        Files.createDirectories(junctionTarget)
+        Files.writeString(junctionTarget.resolve("keep.txt"), "junction")
+        val link = home.resolve("junction-link")
+        val result = ProcessBuilder(
+            "cmd.exe",
+            "/c",
+            "mklink",
+            "/J",
+            link.toString(),
+            junctionTarget.toString(),
+        ).redirectErrorStream(true).start()
+        val output = result.inputStream.bufferedReader().readText()
+        assertEquals(0, result.waitFor(), output)
+        return junctionTarget
+    }
+
+    private fun assertJunctionTarget(junctionTarget: Path?) {
+        if (junctionTarget == null) {
+            return
+        }
+        assertEquals("junction", Files.readString(junctionTarget.resolve("keep.txt")))
+        assertTrue(Files.isDirectory(junctionTarget))
     }
 
     private fun janitorErrors(errorLog: Path?): String {
