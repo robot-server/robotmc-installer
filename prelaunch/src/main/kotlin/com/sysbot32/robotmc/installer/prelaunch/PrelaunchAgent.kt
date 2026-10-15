@@ -53,14 +53,16 @@ class PrelaunchAgent private constructor() {
             if (check != null && check.match && !restartLauncher) {
                 return
             }
-            val command = if (restartLauncher) {
-                System.err.println(LAUNCHER_RESTART_DETAIL)
-                options.installerCommand + LAUNCHER_RESTART_ARGUMENT
-            } else {
-                if (check != null) {
-                    System.err.println("로더 또는 모드가 원격 구성과 달라서 설치기를 실행해요.")
+            val command = when {
+                restartLauncher -> {
+                    System.err.println(LAUNCHER_RESTART_DETAIL)
+                    options.installerCommand + LAUNCHER_RESTART_ARGUMENT
                 }
-                options.installerCommand
+                check != null -> {
+                    System.err.println("로더 또는 모드가 원격 구성과 달라서 설치기를 실행해요.")
+                    options.installerCommand + FINISHED_MISMATCH_ARGUMENT
+                }
+                else -> options.installerCommand
             }
             val installerStarted = try {
                 val process = ProcessBuilder(command)

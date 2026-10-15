@@ -4,6 +4,12 @@ const val LAUNCHER_RESTART_DETAIL =
     "새로 설치한 내용이 아직 런처에 반영되지 않아 게임을 종료했어요.\n마인크래프트 런처를 완전히 종료한 뒤 다시 열고 플레이해 주세요."
 const val LAUNCHER_RESTART_ARGUMENT = "--installer.launcher-restart=true"
 
+/**
+ * 실행 전 검사가 끝났고 로더나 모드가 원격 구성과 다를 때 설치기 인자에 붙인다.
+ * 검사를 끝내지 못했거나 런처만 예전 로더인 경우에는 붙이지 않는다.
+ */
+const val FINISHED_MISMATCH_ARGUMENT = "--installer.finished-mismatch=true"
+
 private val NEOFORGE_JAR = Regex("""^neoforge-(.+)\.jar$""", RegexOption.IGNORE_CASE)
 private val FABRIC_LOADER_JAR = Regex("""^fabric-loader-(.+)\.jar$""", RegexOption.IGNORE_CASE)
 

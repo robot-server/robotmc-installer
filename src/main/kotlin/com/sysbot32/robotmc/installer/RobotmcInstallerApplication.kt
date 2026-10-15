@@ -7,9 +7,11 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.setValue
+import com.sysbot32.robotmc.installer.config.InstallerProperties.Mode
 import com.sysbot32.robotmc.installer.gui.InstallerSession
 import com.sysbot32.robotmc.installer.gui.InstallerUpdateProgress
 import com.sysbot32.robotmc.installer.gui.InstallerWindow
+import com.sysbot32.robotmc.installer.gui.SessionPhase
 import com.sysbot32.robotmc.installer.gui.installInstallerTaskbarIcon
 import com.sysbot32.robotmc.installer.prelaunch.LAUNCHER_RESTART_DETAIL
 import com.sysbot32.robotmc.installer.update.InstallerRelaunch
@@ -29,6 +31,41 @@ internal fun startupArguments(
     resolved: RemoteInstallerConfig.Resolved?,
 ): Array<String> {
     return args + (resolved?.arguments() ?: emptyArray())
+}
+
+/**
+ * 검사가 끝난 로더·모드 불일치이고 설치 모드일 때만 확인 없이 설치를 시작한다.
+ * 업데이트가 화면에 있거나, 신호가 없거나, 제거·런처 재시작 안내이면 시작하지 않는다.
+ */
+internal fun startFinishedMismatchInstall(
+    session: InstallerSession,
+    finishedMismatch: Boolean,
+    updateActive: Boolean,
+): Boolean {
+    if (updateActive || !finishedMismatch) {
+        return false
+    }
+    val state = session.state.value
+    if (state.mode != Mode.INSTALL || state.notice || state.phase != SessionPhase.Confirm) {
+        return false
+    }
+    return session.launchAcceptedWork()
+}
+
+/**
+ * 설치기 교체가 적용됐거나 업데이트 화면이 아직 떠 있으면 이 프로세스에서는 설치하지 않는다.
+ * 교체가 적용되지 않았고 업데이트 화면이 없으면, 불일치 신호일 때 확인 없이 설치를 시작한다.
+ */
+internal fun continueAfterInstallerUpdate(
+    updateApplied: Boolean,
+    updateActive: Boolean,
+    session: InstallerSession,
+    finishedMismatch: Boolean,
+): Boolean {
+    if (updateApplied || updateActive) {
+        return false
+    }
+    return startFinishedMismatchInstall(session, finishedMismatch, updateActive = false)
 }
 
 @SpringBootApplication
@@ -82,6 +119,12 @@ fun main(args: Array<String>) {
         var updating by remember { mutableStateOf(updateDue) }
         if (updating) {
             InstallerUpdateProgress(properties) { success ->
+                continueAfterInstallerUpdate(
+                    updateApplied = success,
+                    updateActive = true,
+                    session = session,
+                    finishedMismatch = properties.finishedMismatch,
+                )
                 if (success) {
                     exitCode = 0
                     app.exitApplication()
@@ -90,6 +133,15 @@ fun main(args: Array<String>) {
                 }
             }
         } else {
+            remember {
+                continueAfterInstallerUpdate(
+                    updateApplied = false,
+                    updateActive = false,
+                    session = session,
+                    finishedMismatch = properties.finishedMismatch,
+                )
+                true
+            }
             InstallerWindow(session, properties) { code ->
                 exitCode = code
                 app.exitApplication()

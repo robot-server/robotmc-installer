@@ -10,12 +10,16 @@ import com.sysbot32.robotmc.installer.launcher.stableInstallerCommand
 import com.sysbot32.robotmc.installer.mod.loader.ModLoaderType
 import com.sysbot32.robotmc.installer.mod.loader.profileVersionId
 import org.springframework.http.converter.json.Jackson2ObjectMapperBuilder
+import java.io.IOException
+import java.net.ServerSocket
+import java.net.SocketTimeoutException
 import java.nio.file.Files
 import java.nio.file.LinkOption
 import java.nio.file.Path
 import java.nio.file.StandardOpenOption
 import java.util.Comparator
 import java.util.concurrent.TimeUnit
+import java.util.concurrent.atomic.AtomicInteger
 import java.util.jar.JarFile
 import javax.tools.ToolProvider
 import kotlin.test.Test
@@ -486,6 +490,58 @@ class PrelaunchCheckTest {
     }
 
     @Test
+    fun finishedLoaderOrModMismatchLaunchesTheInstallerWithADistinctSignal() {
+        val classes = Files.createTempDirectory("robotmc-unattended")
+        compileStandIns(classes)
+        ModFetchProbe().use { probe ->
+            val prefix = "http://127.0.0.1:${probe.port}"
+            val loader = runMismatchTwice(
+                classes = classes,
+                remoteJars = listOf("sodium.jar"),
+                localJars = listOf("sodium.jar"),
+                inheritsFrom = "neoforge-0.0.1",
+                downloadUrlPrefix = prefix,
+            )
+            val mods = runMismatchTwice(
+                classes = classes,
+                remoteJars = listOf("sodium.jar"),
+                localJars = listOf("extra.jar"),
+                inheritsFrom = "neoforge-21.11.6-beta",
+                downloadUrlPrefix = prefix,
+            )
+            val thrown = runThrownCheck(classes, prefix)
+            val signal = "ran\n$FINISHED_MISMATCH_ARGUMENT"
+            for (play in listOf(loader, mods)) {
+                assertEquals(0, play.first.exit)
+                assertEquals(0, play.second.exit)
+                assertEquals(play.first.exit, play.second.exit)
+                assertEquals(signal, play.firstMarker)
+                assertEquals(play.firstMarker, play.secondMarker)
+                assertFalse(play.storedCommand.contains(FINISHED_MISMATCH_ARGUMENT))
+                assertFalse(play.storedCommand.contains(LAUNCHER_RESTART_ARGUMENT))
+                assertFalse(play.first.stdout.contains("SENTINEL_MAIN_RAN"))
+                assertFalse(play.second.stdout.contains("SENTINEL_MAIN_RAN"))
+                assertFalse(play.firstMarker.contains(LAUNCHER_RESTART_ARGUMENT))
+                assertTrue(play.first.stderr.contains("로더 또는 모드가 원격 구성과 달라서"))
+                assertFalse(play.first.stderr.contains("마인크래프트 런처를 완전히 종료"))
+                assertEquals(play.modsBefore.keys, play.modsAfter.keys)
+                for ((name, bytes) in play.modsBefore) {
+                    assertTrue(bytes.contentEquals(play.modsAfter.getValue(name)), name)
+                }
+            }
+            assertNotEquals(FINISHED_MISMATCH_ARGUMENT, LAUNCHER_RESTART_ARGUMENT)
+            assertEquals("ran", thrown.markerText)
+            assertFalse(thrown.markerText.contains(FINISHED_MISMATCH_ARGUMENT))
+            assertFalse(thrown.markerText.contains(LAUNCHER_RESTART_ARGUMENT))
+            assertEquals(0, thrown.run.exit)
+            assertFalse(thrown.run.stdout.contains("SENTINEL_MAIN_RAN"))
+            assertTrue(thrown.run.stderr.contains("실행 전 검사를 끝내지 못해서"))
+            Thread.sleep(200)
+            assertEquals(0, probe.hits.get())
+        }
+    }
+
+    @Test
     fun agentReturnsOnMatchAndExitsAfterTheInstallerOnMismatch() {
         val classes = Files.createTempDirectory("robotmc-sentinel")
         compileStandIns(classes)
@@ -508,6 +564,162 @@ class PrelaunchCheckTest {
         assertEquals(match.first.exit, match.second.exit)
         assertEquals(mismatch.first.marker, mismatch.second.marker)
     }
+
+    private fun runMismatchTwice(
+        classes: Path,
+        remoteJars: List<String>,
+        localJars: List<String>,
+        inheritsFrom: String,
+        downloadUrlPrefix: String,
+    ): MismatchRuns {
+        val minecraft = Files.createTempDirectory("robotmc-unattended-mc").resolve("My Minecraft")
+        Files.createDirectories(minecraft)
+        val gameDir = gameDirectory(minecraft)
+        val yaml = applicationYaml(
+            "neo_forge",
+            "21.11.6-beta",
+            "1.21.11",
+            remoteJars,
+            downloadUrlPrefix,
+        )
+        Files.writeString(minecraft.resolve("launcher_profiles.json"), profiles(gameDir, "RobotMC", null))
+        val marker = minecraft.resolve("installer-ran.txt")
+        val command = listOf(
+            installerJavaExecutable(),
+            "-cp",
+            classes.toString(),
+            "InstallerMarker",
+            marker.toString(),
+        )
+        val service = LauncherService(
+            InstallerProperties(
+                minecraft = InstallerProperties.Minecraft(version = "1.21.11", directory = minecraft),
+                mod = InstallerProperties.Mod(
+                    loader = InstallerProperties.Mod.Loader(ModLoaderType.NEO_FORGE, "21.11.6-beta"),
+                ),
+            ),
+            Jackson2ObjectMapperBuilder.json().build(),
+        )
+        service.applyRobotMcProfile(
+            path = minecraft.resolve("launcher_profiles.json"),
+            prelaunchHome = minecraft.resolve("My Agent"),
+            installerCommand = command,
+            manifestUrl = "",
+            cacheFile = minecraft.resolve("no-cache.yml"),
+            bundledYaml = yaml,
+        )
+        writeAlias(minecraft, "RobotMC", inheritsFrom)
+        val modsDir = gameDir.resolve("mods")
+        writeJars(modsDir, localJars)
+        val modsBefore = snapshotJars(modsDir)
+        val javaArgs = ObjectMapper().readTree(Files.readString(minecraft.resolve("launcher_profiles.json")))
+            .get("profiles").get("robotmc").get("javaArgs").asText()
+        val stored = AgentOptions.read(javaAgentOptionsFile(tokenizeJavaArgs(javaArgs).single { isJavaAgentToken(it) }))
+        val first = runGame(javaArgs, gameDir, classes, marker)
+        val firstMarker = Files.readString(marker)
+        Files.delete(marker)
+        val second = runGame(javaArgs, gameDir, classes, marker)
+        val secondMarker = Files.readString(marker)
+        return MismatchRuns(
+            first = first,
+            second = second,
+            firstMarker = firstMarker,
+            secondMarker = secondMarker,
+            modsBefore = modsBefore,
+            modsAfter = snapshotJars(modsDir),
+            storedCommand = stored.installerCommand,
+        )
+    }
+
+    private fun runThrownCheck(classes: Path, downloadUrlPrefix: String): ThrownCheck {
+        val root = Files.createTempDirectory("robotmc-thrown")
+        val minecraft = root.resolve("minecraft")
+        val gameDir = gameDirectory(minecraft)
+        Files.createDirectories(minecraft)
+        Files.createDirectories(gameDir.resolve("mods"))
+        val yaml = applicationYaml(
+            "neo_forge",
+            "21.11.6-beta",
+            "1.21.11",
+            listOf("sodium.jar"),
+            downloadUrlPrefix,
+        )
+        val bundled = root.resolve("bundled.yml")
+        Files.writeString(bundled, yaml)
+        val marker = root.resolve("installer-ran.txt")
+        val command = listOf(
+            installerJavaExecutable(),
+            "-cp",
+            classes.toString(),
+            "InstallerMarker",
+            marker.toString(),
+        )
+        val options = root.resolve("options.properties")
+        AgentOptions(
+            minecraft,
+            "robotmc",
+            "",
+            root.resolve("no-cache.yml"),
+            bundled,
+            command,
+        ).write(options)
+        val agent = Path.of(System.getProperty("robotmc.prelaunch.agent"))
+        val out = Files.createTempFile("robotmc-out", ".txt")
+        val err = Files.createTempFile("robotmc-err", ".txt")
+        val process = ProcessBuilder(
+            listOf(
+                installerJavaExecutable(),
+                "-javaagent:${agent.toAbsolutePath()}=${options.toAbsolutePath()}",
+                "-cp",
+                classes.toString(),
+                "SentinelMain",
+            ),
+        )
+            .directory(gameDir.toFile())
+            .redirectOutput(out.toFile())
+            .redirectError(err.toFile())
+            .start()
+        val finished = process.waitFor(30, TimeUnit.SECONDS)
+        if (!finished) {
+            process.destroyForcibly()
+        }
+        return ThrownCheck(
+            run = GameRun(
+                command = emptyList(),
+                exit = if (finished) process.exitValue() else -1,
+                stdout = Files.readString(out),
+                stderr = Files.readString(err),
+                marker = Files.exists(marker),
+            ),
+            markerText = Files.readString(marker),
+        )
+    }
+
+    private fun snapshotJars(mods: Path): Map<String, ByteArray> {
+        if (!Files.isDirectory(mods)) {
+            return emptyMap()
+        }
+        return Files.list(mods).use { children ->
+            children.filter { Files.isRegularFile(it) }
+                .toList()
+                .associate { it.fileName.toString() to Files.readAllBytes(it) }
+        }
+    }
+
+    private data class MismatchRuns(
+        val first: GameRun,
+        val second: GameRun,
+        val firstMarker: String,
+        val secondMarker: String,
+        val modsBefore: Map<String, ByteArray>,
+        val modsAfter: Map<String, ByteArray>,
+        val storedCommand: List<String>,
+    )
+
+    private data class ThrownCheck(
+        val run: GameRun,
+        val markerText: String,
+    )
 
     private fun launchTwice(match: Boolean, classes: Path): Pair<GameRun, GameRun> {
         val minecraft = Files.createTempDirectory("robotmc-play").resolve("My Minecraft")
@@ -550,7 +762,7 @@ class PrelaunchCheckTest {
         val first = runGame(javaArgs, gameDir, classes, marker)
         recordRun(if (match) "match" else "mismatch", 1, first)
         if (!match) {
-            assertEquals("ran", Files.readString(marker))
+            assertEquals("ran\n$FINISHED_MISMATCH_ARGUMENT", Files.readString(marker))
             Files.delete(marker)
         }
         val second = runGame(javaArgs, gameDir, classes, marker)
@@ -709,6 +921,7 @@ private fun applicationYaml(
     loaderVersion: String,
     minecraftVersion: String,
     jars: List<String>,
+    downloadUrlPrefix: String = "https://cdn.example/mods",
 ): String {
     return buildString {
         appendLine("installer:")
@@ -720,7 +933,7 @@ private fun applicationYaml(
         appendLine("      version: \"$loaderVersion\"")
         appendLine("    mods:")
         for (jar in jars) {
-            appendLine("      - download-url: 'https://cdn.example/mods/$jar'")
+            appendLine("      - download-url: '$downloadUrlPrefix/$jar'")
         }
     }
 }
@@ -765,6 +978,34 @@ private fun profiles(gameDir: Path, lastVersionId: String, javaArgs: String?): S
 }
 
 private fun bytes(path: Path): List<Int> = Files.readAllBytes(path).map { it.toInt() }
+
+private class ModFetchProbe : AutoCloseable {
+    val hits = AtomicInteger()
+    private val server = ServerSocket(0)
+    private val thread: Thread
+    val port: Int = server.localPort
+
+    init {
+        server.soTimeout = 200
+        thread = Thread {
+            while (!server.isClosed) {
+                try {
+                    server.accept().close()
+                    hits.incrementAndGet()
+                } catch (_: SocketTimeoutException) {
+                } catch (_: IOException) {
+                }
+            }
+        }
+        thread.isDaemon = true
+        thread.start()
+    }
+
+    override fun close() {
+        server.close()
+        thread.join(1_000)
+    }
+}
 
 private fun deleteTree(path: Path) {
     if (!Files.exists(path, LinkOption.NOFOLLOW_LINKS)) {
