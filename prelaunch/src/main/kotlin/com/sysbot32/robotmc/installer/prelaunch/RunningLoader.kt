@@ -10,6 +10,18 @@ const val LAUNCHER_RESTART_ARGUMENT = "--installer.launcher-restart=true"
  */
 const val FINISHED_MISMATCH_ARGUMENT = "--installer.finished-mismatch=true"
 
+/**
+ * 이번 플레이의 로더가 이미 원격 구성과 같을 때 붙인다.
+ * 설치기가 끝나면 그 프로세스가 게임을 이어서 시작한다.
+ */
+const val RESUME_GAME_ARGUMENT = "--installer.resume-game=true"
+
+/**
+ * 설치기 파일을 바꾼 뒤 새 프로세스로 넘길 때의 종료 코드.
+ * 0이면 에이전트가 게임을 이어서 시작하므로, 교체 직후에는 이 값을 쓴다.
+ */
+const val RESUME_GAME_HANDOFF_EXIT = 20
+
 private val NEOFORGE_JAR = Regex("""^neoforge-(.+)\.jar$""", RegexOption.IGNORE_CASE)
 private val FABRIC_LOADER_JAR = Regex("""^fabric-loader-(.+)\.jar$""", RegexOption.IGNORE_CASE)
 
@@ -55,6 +67,25 @@ private fun argumentValue(arguments: List<String>, name: String): String? {
         }
     }
     return null
+}
+
+/**
+ * 이번 게임 JVM 의 로더가 [targetLoaderId] 와 같으면 true.
+ * 로더를 못 찾으면 false 다. 런처를 다시 구성하지 않아도 되는 경우만 골라 낸다.
+ */
+fun runningLoaderMatches(
+    runningLoaderIds: List<String>,
+    targetLoaderId: String?,
+    runningMinecraftVersion: String? = null,
+): Boolean {
+    if (targetLoaderId.isNullOrBlank() || runningLoaderIds.isEmpty()) {
+        return false
+    }
+    if (runningLoaderIds.none { sameLoader(it, targetLoaderId) }) {
+        return false
+    }
+    val targetMinecraft = minecraftVersionInFabricLoaderId(targetLoaderId) ?: return true
+    return runningMinecraftVersion == null || runningMinecraftVersion == targetMinecraft
 }
 
 /**

@@ -1,11 +1,14 @@
 package com.sysbot32.robotmc.installer.config
 
 import com.sysbot32.robotmc.installer.continueAfterInstallerUpdate
+import com.sysbot32.robotmc.installer.installerExitAfterAppliedUpdate
 import com.sysbot32.robotmc.installer.gui.InstallerSession
 import com.sysbot32.robotmc.installer.gui.SessionPhase
 import com.sysbot32.robotmc.installer.gui.showsWorkingScreen
 import com.sysbot32.robotmc.installer.prelaunch.FINISHED_MISMATCH_ARGUMENT
 import com.sysbot32.robotmc.installer.prelaunch.LAUNCHER_RESTART_ARGUMENT
+import com.sysbot32.robotmc.installer.prelaunch.RESUME_GAME_ARGUMENT
+import com.sysbot32.robotmc.installer.prelaunch.RESUME_GAME_HANDOFF_EXIT
 import com.sysbot32.robotmc.installer.prelaunch.installerJavaExecutable
 import com.sysbot32.robotmc.installer.progress.ProgressService
 import com.sysbot32.robotmc.installer.update.PreparedInstallerUpdate
@@ -141,9 +144,13 @@ class InstallerSelfUpdateTest {
             "--installer.mode=uninstall",
             "--installer.launcher-restart=true",
             FINISHED_MISMATCH_ARGUMENT,
+            RESUME_GAME_ARGUMENT,
             "--installer.minecraft.directory=/tmp/minecraft custom",
         )
         assertNotEquals(LAUNCHER_RESTART_ARGUMENT, FINISHED_MISMATCH_ARGUMENT)
+        assertEquals(0, installerExitAfterAppliedUpdate(resumeGame = false))
+        assertEquals(RESUME_GAME_HANDOFF_EXIT, installerExitAfterAppliedUpdate(resumeGame = true))
+        assertNotEquals(0, installerExitAfterAppliedUpdate(resumeGame = true))
         assertEquals(listOf("--") + kept, applicationRelaunchArguments(kept))
         val helper = replaceHelperJar(root.resolve("helper-args"))
         val verified = markerJar()

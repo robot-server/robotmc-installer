@@ -542,6 +542,75 @@ class PrelaunchCheckTest {
     }
 
     @Test
+    fun currentLoaderModMismatchResumesTheGameAfterTheInstallerExits() {
+        assertTrue(runningLoaderMatches(listOf("neoforge-21.11.6-beta"), "neoforge-21.11.6-beta"))
+        assertFalse(runningLoaderMatches(emptyList(), "neoforge-21.11.6-beta"))
+        assertFalse(runningLoaderMatches(listOf("neoforge-0.0.1"), "neoforge-21.11.6-beta"))
+        assertFalse(
+            runningLoaderMatches(
+                listOf("fabric-loader-0.19.5-26.3"),
+                "fabric-loader-0.19.5-26.3",
+                "1.21.11",
+            ),
+        )
+        assertTrue(
+            runningLoaderMatches(
+                listOf("fabric-loader-0.19.5-26.3"),
+                "fabric-loader-0.19.5-26.3",
+                "26.3",
+            ),
+        )
+        val classes = Files.createTempDirectory("robotmc-resume")
+        compileStandIns(classes)
+        val resumed = launchMismatch(
+            classes = classes,
+            remoteJars = listOf("sodium.jar"),
+            localJars = listOf("extra.jar"),
+            inheritsFrom = "neoforge-21.11.6-beta",
+            programArgs = listOf("--fml.neoForgeVersion", "21.11.6-beta"),
+            installerMain = "InstallerMarker",
+        )
+        val resumedMarker = Files.readString(resumed.markerFile)
+        assertEquals(0, resumed.run.exit)
+        assertTrue(resumed.run.stdout.contains("SENTINEL_MAIN_RAN"))
+        assertEquals(
+            "ran\n$FINISHED_MISMATCH_ARGUMENT\n$RESUME_GAME_ARGUMENT",
+            resumedMarker,
+        )
+        assertFalse(resumedMarker.contains(LAUNCHER_RESTART_ARGUMENT))
+        val changedLoader = launchMismatch(
+            classes = classes,
+            remoteJars = listOf("sodium.jar"),
+            localJars = listOf("sodium.jar"),
+            inheritsFrom = "neoforge-0.0.1",
+            programArgs = listOf("--fml.neoForgeVersion", "0.0.1"),
+            installerMain = "InstallerMarker",
+        )
+        val changedMarker = Files.readString(changedLoader.markerFile)
+        assertEquals(0, changedLoader.run.exit)
+        assertFalse(changedLoader.run.stdout.contains("SENTINEL_MAIN_RAN"))
+        assertEquals("ran\n$FINISHED_MISMATCH_ARGUMENT", changedMarker)
+        assertFalse(changedMarker.contains(RESUME_GAME_ARGUMENT))
+        val failedInstall = launchMismatch(
+            classes = classes,
+            remoteJars = listOf("sodium.jar"),
+            localJars = listOf("extra.jar"),
+            inheritsFrom = "neoforge-21.11.6-beta",
+            programArgs = listOf("--fml.neoForgeVersion", "21.11.6-beta"),
+            installerMain = "InstallerExit",
+            installerExit = 7,
+        )
+        val failedMarker = Files.readString(failedInstall.markerFile)
+        assertEquals(0, failedInstall.run.exit)
+        assertFalse(failedInstall.run.stdout.contains("SENTINEL_MAIN_RAN"))
+        assertEquals(
+            "ran\n$FINISHED_MISMATCH_ARGUMENT\n$RESUME_GAME_ARGUMENT",
+            failedMarker,
+        )
+        assertNotEquals(0, RESUME_GAME_HANDOFF_EXIT)
+    }
+
+    @Test
     fun agentReturnsOnMatchAndExitsAfterTheInstallerOnMismatch() {
         val classes = Files.createTempDirectory("robotmc-sentinel")
         compileStandIns(classes)
@@ -563,6 +632,60 @@ class PrelaunchCheckTest {
         assertTrue(mismatch.first.stderr.contains("설치기를 실행해요."))
         assertEquals(match.first.exit, match.second.exit)
         assertEquals(mismatch.first.marker, mismatch.second.marker)
+    }
+
+    private data class LaunchResult(
+        val run: GameRun,
+        val markerFile: Path,
+    )
+
+    private fun launchMismatch(
+        classes: Path,
+        remoteJars: List<String>,
+        localJars: List<String>,
+        inheritsFrom: String,
+        programArgs: List<String>,
+        installerMain: String,
+        installerExit: Int? = null,
+    ): LaunchResult {
+        val minecraft = Files.createTempDirectory("robotmc-resume-mc").resolve("My Minecraft")
+        Files.createDirectories(minecraft)
+        val gameDir = gameDirectory(minecraft)
+        val yaml = applicationYaml("neo_forge", "21.11.6-beta", "1.21.11", remoteJars)
+        Files.writeString(minecraft.resolve("launcher_profiles.json"), profiles(gameDir, "RobotMC", null))
+        val marker = minecraft.resolve("installer-ran.txt")
+        val command = mutableListOf(
+            installerJavaExecutable(),
+            "-cp",
+            classes.toString(),
+            installerMain,
+            marker.toString(),
+        )
+        if (installerExit != null) {
+            command += installerExit.toString()
+        }
+        val service = LauncherService(
+            InstallerProperties(
+                minecraft = InstallerProperties.Minecraft(version = "1.21.11", directory = minecraft),
+                mod = InstallerProperties.Mod(
+                    loader = InstallerProperties.Mod.Loader(ModLoaderType.NEO_FORGE, "21.11.6-beta"),
+                ),
+            ),
+            Jackson2ObjectMapperBuilder.json().build(),
+        )
+        service.applyRobotMcProfile(
+            path = minecraft.resolve("launcher_profiles.json"),
+            prelaunchHome = minecraft.resolve("My Agent"),
+            installerCommand = command,
+            manifestUrl = "",
+            cacheFile = minecraft.resolve("no-cache.yml"),
+            bundledYaml = yaml,
+        )
+        writeAlias(minecraft, "RobotMC", inheritsFrom)
+        writeJars(gameDir.resolve("mods"), localJars)
+        val javaArgs = ObjectMapper().readTree(Files.readString(minecraft.resolve("launcher_profiles.json")))
+            .get("profiles").get("robotmc").get("javaArgs").asText()
+        return LaunchResult(runGame(javaArgs, gameDir, classes, marker, programArgs), marker)
     }
 
     private fun runMismatchTwice(
@@ -902,8 +1025,36 @@ class PrelaunchCheckTest {
             }
             """.trimIndent() + "\n",
         )
+        val exitMarker = dir.resolve("InstallerExit.java")
+        Files.writeString(
+            exitMarker,
+            """
+            import java.nio.file.Files;
+            import java.nio.file.Path;
+            public class InstallerExit {
+                public static void main(String[] args) throws Exception {
+                    int code = Integer.parseInt(args[1]);
+                    StringBuilder text = new StringBuilder("ran");
+                    for (int i = 2; i < args.length; i++) {
+                        text.append('\n').append(args[i]);
+                    }
+                    Files.writeString(Path.of(args[0]), text.toString());
+                    System.exit(code);
+                }
+            }
+            """.trimIndent() + "\n",
+        )
         val compiler = ToolProvider.getSystemJavaCompiler() ?: error("javac is required")
-        val ok = compiler.run(null, null, null, "-d", dir.toString(), sentinel.toString(), marker.toString())
+        val ok = compiler.run(
+            null,
+            null,
+            null,
+            "-d",
+            dir.toString(),
+            sentinel.toString(),
+            marker.toString(),
+            exitMarker.toString(),
+        )
         check(ok == 0)
     }
 

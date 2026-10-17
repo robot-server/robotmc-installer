@@ -169,6 +169,11 @@ fun InstallerWindow(
         state = windowState,
         icon = icon,
     ) {
+        LaunchedEffect(state.phase, state.exitCode, state.notice, state.declined) {
+            if (shouldCloseAfterUnattendedInstall(state, properties.resumeGame)) {
+                onExit(state.exitCode ?: 0)
+            }
+        }
         LaunchedEffect(detailsOpen, updateNotice != null) {
             val height = windowHeight(detailsOpen, updateNotice != null, window)
             windowState.size = DpSize(520.dp, height)

@@ -23,6 +23,9 @@ class PrelaunchAgent private constructor() {
         const val EXIT_CHECK_FAILED = 2
         const val EXIT_INSTALLER_NOT_STARTED = 3
 
+        /** 모드 설치가 끝나 게임을 이어서 시작할 때까지 설치기 프로세스를 기다리는 시간. */
+        private const val RESUME_GAME_WAIT_MINUTES = 30L
+
         @JvmStatic
         fun premain(agentArgs: String?, instrumentation: Instrumentation) {
             val options = try {
@@ -43,13 +46,15 @@ class PrelaunchAgent private constructor() {
             // 디스크 구성은 맞는데 런처가 예전 로더로 JVM 을 띄운 경우. 설치는 다시 하지 않는다.
             val classPath = System.getProperty("java.class.path")
             val arguments = ProcessHandle.current().info().arguments().orElse(emptyArray()).toList()
+            val runningLoaders = runningLoaderIds(classPath, arguments)
+            val runningMinecraft = runningMinecraftVersion(classPath, arguments)
             val restartLauncher = check != null &&
                 check.match &&
-                loaderLaunchDiffers(
-                    runningLoaderIds(classPath, arguments),
-                    check.launchedLoaderId,
-                    runningMinecraftVersion(classPath, arguments),
-                )
+                loaderLaunchDiffers(runningLoaders, check.launchedLoaderId, runningMinecraft)
+            // 모드만 다르고 이번 JVM 로더가 이미 원격 구성과 같으면, 설치 후 게임을 이어서 시작한다.
+            val resumeGame = check != null &&
+                !check.match &&
+                runningLoaderMatches(runningLoaders, check.remoteLoaderId, runningMinecraft)
             if (check != null && check.match && !restartLauncher) {
                 return
             }
@@ -57,6 +62,10 @@ class PrelaunchAgent private constructor() {
                 restartLauncher -> {
                     System.err.println(LAUNCHER_RESTART_DETAIL)
                     options.installerCommand + LAUNCHER_RESTART_ARGUMENT
+                }
+                check != null && resumeGame -> {
+                    System.err.println("로더 또는 모드가 원격 구성과 달라서 설치기를 실행해요.")
+                    options.installerCommand + FINISHED_MISMATCH_ARGUMENT + RESUME_GAME_ARGUMENT
                 }
                 check != null -> {
                     System.err.println("로더 또는 모드가 원격 구성과 달라서 설치기를 실행해요.")
@@ -69,7 +78,14 @@ class PrelaunchAgent private constructor() {
                     .redirectOutput(ProcessBuilder.Redirect.DISCARD)
                     .redirectError(ProcessBuilder.Redirect.DISCARD)
                     .start()
-                process.waitFor(5, TimeUnit.SECONDS)
+                if (resumeGame) {
+                    val finished = process.waitFor(RESUME_GAME_WAIT_MINUTES, TimeUnit.MINUTES)
+                    if (finished && process.exitValue() == 0) {
+                        return
+                    }
+                } else {
+                    process.waitFor(5, TimeUnit.SECONDS)
+                }
                 true
             } catch (exception: Exception) {
                 System.err.println("설치기를 실행하지 못했어요.")

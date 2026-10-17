@@ -213,6 +213,15 @@ class InstallerSessionTest {
         assertEquals(SessionPhase.Finished, session.state.value.phase)
         assertEquals("완료됐어요.", session.state.value.message)
         assertEquals(0, session.state.value.exitCode)
+        assertFalse(shouldCloseAfterUnattendedInstall(session.state.value, resumeGame = false))
+        val resume = bindInstaller(
+            "installer.finished-mismatch" to "true",
+            "installer.resume-game" to "true",
+        )
+        assertTrue(resume.resumeGame)
+        assertTrue(shouldCloseAfterUnattendedInstall(session.state.value, resume.resumeGame))
+        assertFalse(shouldCloseAfterUnattendedInstall(session.state.value.copy(exitCode = -1), resume.resumeGame))
+        assertFalse(shouldCloseAfterUnattendedInstall(session.state.value.copy(notice = true), resume.resumeGame))
         assertFalse(startFinishedMismatchInstall(session, bound.finishedMismatch, updateActive = false))
         assertEquals(1, runs)
     }

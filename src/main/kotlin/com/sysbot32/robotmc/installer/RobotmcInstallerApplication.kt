@@ -14,6 +14,7 @@ import com.sysbot32.robotmc.installer.gui.InstallerWindow
 import com.sysbot32.robotmc.installer.gui.SessionPhase
 import com.sysbot32.robotmc.installer.gui.installInstallerTaskbarIcon
 import com.sysbot32.robotmc.installer.prelaunch.LAUNCHER_RESTART_DETAIL
+import com.sysbot32.robotmc.installer.prelaunch.RESUME_GAME_HANDOFF_EXIT
 import com.sysbot32.robotmc.installer.update.InstallerRelaunch
 import com.sysbot32.robotmc.installer.update.installerUpdateDue
 import com.sysbot32.robotmc.installer.prelaunch.installerLaunchCommand
@@ -56,6 +57,14 @@ internal fun startFinishedMismatchInstall(
  * 설치기 교체가 적용됐거나 업데이트 화면이 아직 떠 있으면 이 프로세스에서는 설치하지 않는다.
  * 교체가 적용되지 않았고 업데이트 화면이 없으면, 불일치 신호일 때 확인 없이 설치를 시작한다.
  */
+/**
+ * 설치기 교체가 적용된 프로세스의 종료 코드.
+ * 게임을 이어서 시작하는 경우에는 0을 쓰지 않는다. 0은 설치가 끝났다는 뜻이다.
+ */
+internal fun installerExitAfterAppliedUpdate(resumeGame: Boolean): Int {
+    return if (resumeGame) RESUME_GAME_HANDOFF_EXIT else 0
+}
+
 internal fun continueAfterInstallerUpdate(
     updateApplied: Boolean,
     updateActive: Boolean,
@@ -126,7 +135,7 @@ fun main(args: Array<String>) {
                     finishedMismatch = properties.finishedMismatch,
                 )
                 if (success) {
-                    exitCode = 0
+                    exitCode = installerExitAfterAppliedUpdate(properties.resumeGame)
                     app.exitApplication()
                 } else {
                     updating = false
