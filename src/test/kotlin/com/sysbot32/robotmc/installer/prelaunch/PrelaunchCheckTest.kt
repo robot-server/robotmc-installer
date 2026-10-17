@@ -568,7 +568,8 @@ class PrelaunchCheckTest {
             localJars = listOf("extra.jar"),
             inheritsFrom = "neoforge-21.11.6-beta",
             programArgs = listOf("--fml.neoForgeVersion", "21.11.6-beta"),
-            installerMain = "InstallerMarker",
+            installerMain = "InstallerExit",
+            installerExit = RESUME_GAME_CONTINUE_EXIT,
         )
         val resumedMarker = Files.readString(resumed.markerFile)
         assertEquals(0, resumed.run.exit)
@@ -608,6 +609,21 @@ class PrelaunchCheckTest {
             failedMarker,
         )
         assertNotEquals(0, RESUME_GAME_HANDOFF_EXIT)
+        assertNotEquals(0, RESUME_GAME_CONTINUE_EXIT)
+        val closedWithoutInstallSuccess = launchMismatch(
+            classes = classes,
+            remoteJars = listOf("sodium.jar"),
+            localJars = listOf("extra.jar"),
+            inheritsFrom = "neoforge-21.11.6-beta",
+            programArgs = listOf("--fml.neoForgeVersion", "21.11.6-beta"),
+            installerMain = "InstallerMarker",
+        )
+        assertEquals(0, closedWithoutInstallSuccess.run.exit)
+        assertFalse(closedWithoutInstallSuccess.run.stdout.contains("SENTINEL_MAIN_RAN"))
+        assertEquals(
+            "ran\n$FINISHED_MISMATCH_ARGUMENT\n$RESUME_GAME_ARGUMENT",
+            Files.readString(closedWithoutInstallSuccess.markerFile),
+        )
     }
 
     @Test

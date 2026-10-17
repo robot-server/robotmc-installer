@@ -17,8 +17,14 @@ const val FINISHED_MISMATCH_ARGUMENT = "--installer.finished-mismatch=true"
 const val RESUME_GAME_ARGUMENT = "--installer.resume-game=true"
 
 /**
+ * 설치가 성공해서 이번 플레이의 게임을 이어서 시작할 때의 설치기 종료 코드.
+ * 0은 취소나 제거에도 쓰이므로 재개 신호로 쓰지 않는다.
+ */
+const val RESUME_GAME_CONTINUE_EXIT = 10
+
+/**
  * 설치기 파일을 바꾼 뒤 새 프로세스로 넘길 때의 종료 코드.
- * 0이면 에이전트가 게임을 이어서 시작하므로, 교체 직후에는 이 값을 쓴다.
+ * 게임을 이어서 시작하는 코드와 다르므로, 교체 직후 이번 플레이는 재개하지 않는다.
  */
 const val RESUME_GAME_HANDOFF_EXIT = 20
 

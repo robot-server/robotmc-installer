@@ -3,6 +3,7 @@ package com.sysbot32.robotmc.installer.gui
 import com.sysbot32.robotmc.installer.config.InstallerProperties
 import com.sysbot32.robotmc.installer.config.InstallerProperties.Mode
 import com.sysbot32.robotmc.installer.prelaunch.LAUNCHER_RESTART_DETAIL
+import com.sysbot32.robotmc.installer.prelaunch.RESUME_GAME_CONTINUE_EXIT
 import com.sysbot32.robotmc.installer.startFinishedMismatchInstall
 import com.sysbot32.robotmc.installer.exception.UserException
 import com.sysbot32.robotmc.installer.progress.ProgressService
@@ -222,6 +223,14 @@ class InstallerSessionTest {
         assertTrue(shouldCloseAfterUnattendedInstall(session.state.value, resume.resumeGame))
         assertFalse(shouldCloseAfterUnattendedInstall(session.state.value.copy(exitCode = -1), resume.resumeGame))
         assertFalse(shouldCloseAfterUnattendedInstall(session.state.value.copy(notice = true), resume.resumeGame))
+        assertFalse(shouldCloseAfterUnattendedInstall(session.state.value.copy(declined = true), resume.resumeGame))
+        assertFalse(
+            shouldCloseAfterUnattendedInstall(
+                session.state.value.copy(mode = Mode.UNINSTALL),
+                resume.resumeGame,
+            ),
+        )
+        assertNotEquals(0, RESUME_GAME_CONTINUE_EXIT)
         assertFalse(startFinishedMismatchInstall(session, bound.finishedMismatch, updateActive = false))
         assertEquals(1, runs)
     }

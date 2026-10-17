@@ -46,6 +46,7 @@ import androidx.compose.ui.window.WindowState
 import androidx.compose.ui.window.rememberDialogState
 import androidx.compose.ui.window.rememberWindowState
 import com.sysbot32.robotmc.installer.config.InstallerProperties
+import com.sysbot32.robotmc.installer.prelaunch.RESUME_GAME_CONTINUE_EXIT
 import com.sysbot32.robotmc.installer.update.runInstallerUpdate
 import io.github.oshai.kotlinlogging.KotlinLogging
 import kotlinx.coroutines.Dispatchers
@@ -171,7 +172,7 @@ fun InstallerWindow(
     ) {
         LaunchedEffect(state.phase, state.exitCode, state.notice, state.declined) {
             if (shouldCloseAfterUnattendedInstall(state, properties.resumeGame)) {
-                onExit(state.exitCode ?: 0)
+                onExit(RESUME_GAME_CONTINUE_EXIT)
             }
         }
         LaunchedEffect(detailsOpen, updateNotice != null) {

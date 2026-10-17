@@ -80,7 +80,7 @@ class PrelaunchAgent private constructor() {
                     .start()
                 if (resumeGame) {
                     val finished = process.waitFor(RESUME_GAME_WAIT_MINUTES, TimeUnit.MINUTES)
-                    if (finished && process.exitValue() == 0) {
+                    if (finished && process.exitValue() == RESUME_GAME_CONTINUE_EXIT) {
                         return
                     }
                 } else {

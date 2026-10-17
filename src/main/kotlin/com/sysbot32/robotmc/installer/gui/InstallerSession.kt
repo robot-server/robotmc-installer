@@ -35,6 +35,7 @@ fun SessionPhase.showsWorkingScreen(): Boolean = this == SessionPhase.Working
  */
 fun shouldCloseAfterUnattendedInstall(state: SessionState, resumeGame: Boolean): Boolean {
     return resumeGame &&
+        state.mode == Mode.INSTALL &&
         state.phase == SessionPhase.Finished &&
         state.exitCode == 0 &&
         !state.declined &&
