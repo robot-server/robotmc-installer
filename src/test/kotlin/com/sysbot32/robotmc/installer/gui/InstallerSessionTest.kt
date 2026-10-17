@@ -1,14 +1,22 @@
 package com.sysbot32.robotmc.installer.gui
 
+import com.sysbot32.robotmc.installer.config.InstallerProperties
 import com.sysbot32.robotmc.installer.config.InstallerProperties.Mode
 import com.sysbot32.robotmc.installer.prelaunch.LAUNCHER_RESTART_DETAIL
+import com.sysbot32.robotmc.installer.prelaunch.RESUME_GAME_CONTINUE_EXIT
+import com.sysbot32.robotmc.installer.startFinishedMismatchInstall
 import com.sysbot32.robotmc.installer.exception.UserException
 import com.sysbot32.robotmc.installer.progress.ProgressService
+import org.springframework.boot.context.properties.bind.Bindable
+import org.springframework.boot.context.properties.bind.Binder
+import org.springframework.boot.context.properties.source.MapConfigurationPropertySource
 import java.nio.file.Files
 import java.nio.file.Path
 import java.nio.file.attribute.PosixFilePermission
 import java.util.concurrent.CancellationException
+import java.util.concurrent.CountDownLatch
 import java.util.concurrent.CyclicBarrier
+import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicInteger
 import kotlin.test.Test
 import kotlin.test.assertEquals
@@ -177,6 +185,84 @@ class InstallerSessionTest {
         assertEquals(LAUNCHER_RESTART_DETAIL, session.state.value.message)
         assertEquals(0, session.state.value.exitCode)
         assertNoFailureReport(session.state.value)
+    }
+
+    @Test
+    fun finishedMismatchInstallBeginsOnTheWorkingScreenOnce() {
+        val bound = bindInstaller("installer.finished-mismatch" to "true")
+        assertTrue(bound.finishedMismatch)
+        assertEquals(Mode.INSTALL, bound.mode)
+        assertFalse(bound.launcherRestart)
+        val entered = CountDownLatch(1)
+        var runs = 0
+        var phaseDuringWork: SessionPhase? = null
+        lateinit var session: InstallerSession
+        session = openSession { _ ->
+            runs += 1
+            phaseDuringWork = session.state.value.phase
+            entered.countDown()
+        }
+
+        assertTrue(startFinishedMismatchInstall(session, bound.finishedMismatch, updateActive = false))
+        assertTrue(entered.await(5, TimeUnit.SECONDS))
+        awaitFinished(session)
+
+        assertEquals(1, runs)
+        val during = phaseDuringWork
+        assertEquals(SessionPhase.Working, during)
+        assertTrue(during != null && during.showsWorkingScreen())
+        assertEquals(SessionPhase.Finished, session.state.value.phase)
+        assertEquals("완료됐어요.", session.state.value.message)
+        assertEquals(0, session.state.value.exitCode)
+        assertFalse(shouldCloseAfterUnattendedInstall(session.state.value, resumeGame = false))
+        val resume = bindInstaller(
+            "installer.finished-mismatch" to "true",
+            "installer.resume-game" to "true",
+        )
+        assertTrue(resume.resumeGame)
+        assertTrue(shouldCloseAfterUnattendedInstall(session.state.value, resume.resumeGame))
+        assertFalse(shouldCloseAfterUnattendedInstall(session.state.value.copy(exitCode = -1), resume.resumeGame))
+        assertFalse(shouldCloseAfterUnattendedInstall(session.state.value.copy(notice = true), resume.resumeGame))
+        assertFalse(shouldCloseAfterUnattendedInstall(session.state.value.copy(declined = true), resume.resumeGame))
+        assertFalse(
+            shouldCloseAfterUnattendedInstall(
+                session.state.value.copy(mode = Mode.UNINSTALL),
+                resume.resumeGame,
+            ),
+        )
+        assertNotEquals(0, RESUME_GAME_CONTINUE_EXIT)
+        assertFalse(startFinishedMismatchInstall(session, bound.finishedMismatch, updateActive = false))
+        assertEquals(1, runs)
+    }
+
+    @Test
+    fun directOpenUnfinishedCheckLauncherRestartAndUninstallDoNotStartInstall() {
+        val direct = bindInstaller()
+        assertFalse(direct.finishedMismatch)
+        assertInstallStays(direct.finishedMismatch, direct.mode, notice = null, updateActive = false, SessionPhase.Confirm)
+
+        val unfinished = bindInstaller()
+        assertFalse(unfinished.finishedMismatch)
+        assertInstallStays(unfinished.finishedMismatch, unfinished.mode, notice = null, updateActive = false, SessionPhase.Confirm)
+
+        val duringUpdate = bindInstaller("installer.finished-mismatch" to "true")
+        assertTrue(duringUpdate.finishedMismatch)
+        assertInstallStays(duringUpdate.finishedMismatch, duringUpdate.mode, notice = null, updateActive = true, SessionPhase.Confirm)
+
+        val restart = bindInstaller(
+            "installer.launcher-restart" to "true",
+            "installer.finished-mismatch" to "true",
+        )
+        assertTrue(restart.launcherRestart)
+        val notice = if (restart.launcherRestart) LAUNCHER_RESTART_DETAIL else null
+        assertInstallStays(restart.finishedMismatch, restart.mode, notice, updateActive = false, SessionPhase.Finished)
+
+        val uninstall = bindInstaller(
+            "installer.mode" to "uninstall",
+            "installer.finished-mismatch" to "true",
+        )
+        assertEquals(Mode.UNINSTALL, uninstall.mode)
+        assertInstallStays(uninstall.finishedMismatch, uninstall.mode, notice = null, updateActive = false, SessionPhase.Confirm)
     }
 
     @Test
@@ -438,6 +524,47 @@ class InstallerSessionTest {
                 assertEquals(before, runs.get())
             }
         }
+    }
+
+    private fun assertInstallStays(
+        finishedMismatch: Boolean,
+        mode: Mode,
+        notice: String?,
+        updateActive: Boolean,
+        phase: SessionPhase,
+    ) {
+        var runs = 0
+        val session = openSession(mode = mode, notice = notice) { _ -> runs += 1 }
+
+        assertFalse(startFinishedMismatchInstall(session, finishedMismatch, updateActive))
+
+        assertEquals(0, runs)
+        assertEquals(phase, session.state.value.phase)
+        assertEquals(mode, session.state.value.mode)
+        if (notice == null) {
+            assertFalse(session.state.value.notice)
+            assertNull(session.state.value.message)
+        } else {
+            assertTrue(session.state.value.notice)
+            assertEquals(notice, session.state.value.message)
+            assertEquals(0, session.state.value.exitCode)
+        }
+    }
+
+    private fun awaitFinished(session: InstallerSession) {
+        val deadline = System.nanoTime() + 5_000_000_000L
+        while (session.state.value.phase != SessionPhase.Finished && System.nanoTime() < deadline) {
+            Thread.sleep(10)
+        }
+        assertEquals(SessionPhase.Finished, session.state.value.phase)
+    }
+
+    private fun bindInstaller(vararg values: Pair<String, String>): InstallerProperties {
+        val properties = mutableMapOf("installer.minecraft.version" to "26.3")
+        properties.putAll(values)
+        return Binder(MapConfigurationPropertySource(properties))
+            .bind("installer", Bindable.of(InstallerProperties::class.java))
+            .orElseThrow { IllegalStateException("installer properties did not bind") }
     }
 
     private fun openSession(

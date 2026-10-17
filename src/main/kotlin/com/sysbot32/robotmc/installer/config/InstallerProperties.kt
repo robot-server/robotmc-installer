@@ -56,6 +56,16 @@ data class InstallerProperties(
      * 설치는 하지 않고 런처를 껐다 켜 달라는 안내만 연다.
      */
     val launcherRestart: Boolean = false,
+    /**
+     * 실행 전 검사가 끝났고 디스크의 로더나 모드가 원격 구성과 다를 때.
+     * 설치 모드면 확인 없이 진행 화면에서 설치를 시작한다.
+     */
+    val finishedMismatch: Boolean = false,
+    /**
+     * 이번 플레이의 로더가 이미 원격 구성과 같을 때.
+     * 설치가 끝나면 창을 닫고, 게임을 띄운 프로세스가 이어서 시작한다.
+     */
+    val resumeGame: Boolean = false,
 ) {
     enum class Mode {
         INSTALL,

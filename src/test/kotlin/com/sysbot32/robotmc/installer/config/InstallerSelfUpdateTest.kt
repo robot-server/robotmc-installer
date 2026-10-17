@@ -1,6 +1,16 @@
 package com.sysbot32.robotmc.installer.config
 
+import com.sysbot32.robotmc.installer.continueAfterInstallerUpdate
+import com.sysbot32.robotmc.installer.installerExitAfterAppliedUpdate
+import com.sysbot32.robotmc.installer.gui.InstallerSession
+import com.sysbot32.robotmc.installer.gui.SessionPhase
+import com.sysbot32.robotmc.installer.gui.showsWorkingScreen
+import com.sysbot32.robotmc.installer.prelaunch.FINISHED_MISMATCH_ARGUMENT
+import com.sysbot32.robotmc.installer.prelaunch.LAUNCHER_RESTART_ARGUMENT
+import com.sysbot32.robotmc.installer.prelaunch.RESUME_GAME_ARGUMENT
+import com.sysbot32.robotmc.installer.prelaunch.RESUME_GAME_HANDOFF_EXIT
 import com.sysbot32.robotmc.installer.prelaunch.installerJavaExecutable
+import com.sysbot32.robotmc.installer.progress.ProgressService
 import com.sysbot32.robotmc.installer.update.PreparedInstallerUpdate
 import com.sysbot32.robotmc.installer.update.applicationRelaunchArguments
 import com.sysbot32.robotmc.installer.update.armInstallerUpdate
@@ -8,6 +18,8 @@ import com.sysbot32.robotmc.installer.update.installerStagingPath
 import com.sysbot32.robotmc.installer.update.replaceHelperJar
 import com.sysbot32.robotmc.installer.update.runInstallerUpdate
 import com.sysbot32.robotmc.installer.update.runningInstallerJar
+import java.util.concurrent.CountDownLatch
+import java.util.concurrent.TimeUnit
 import org.junit.jupiter.api.io.TempDir
 import java.io.IOException
 import java.net.URI
@@ -131,8 +143,14 @@ class InstallerSelfUpdateTest {
         val kept = listOf(
             "--installer.mode=uninstall",
             "--installer.launcher-restart=true",
+            FINISHED_MISMATCH_ARGUMENT,
+            RESUME_GAME_ARGUMENT,
             "--installer.minecraft.directory=/tmp/minecraft custom",
         )
+        assertNotEquals(LAUNCHER_RESTART_ARGUMENT, FINISHED_MISMATCH_ARGUMENT)
+        assertEquals(0, installerExitAfterAppliedUpdate(resumeGame = false))
+        assertEquals(RESUME_GAME_HANDOFF_EXIT, installerExitAfterAppliedUpdate(resumeGame = true))
+        assertNotEquals(0, installerExitAfterAppliedUpdate(resumeGame = true))
         assertEquals(listOf("--") + kept, applicationRelaunchArguments(kept))
         val helper = replaceHelperJar(root.resolve("helper-args"))
         val verified = markerJar()
@@ -150,8 +168,95 @@ class InstallerSelfUpdateTest {
         assertEquals("-jar", argv[1], output)
         assertEquals(target.toRealPath(), Path.of(argv[2]).toRealPath())
         assertEquals(kept, argv.drop(3))
+        assertTrue(argv.indexOf(FINISHED_MISMATCH_ARGUMENT) > 2, output)
         val marked = Path.of(awaitMarker(target, output).lineSequence().first())
         assertEquals(target.toRealPath(), marked.toRealPath())
+
+        val events = java.util.Collections.synchronizedList(mutableListOf<String>())
+        val entered = CountDownLatch(1)
+        var runs = 0
+        var phaseDuringWork: SessionPhase? = null
+        lateinit var session: InstallerSession
+        session = InstallerSession(
+            mode = InstallerProperties.Mode.INSTALL,
+            totalSteps = 1,
+            progress = ProgressService(),
+            work = {
+                runs += 1
+                events.add("install")
+                phaseDuringWork = session.state.value.phase
+                entered.countDown()
+            },
+        )
+        val dueTarget = root.resolve("due-update").resolve("installer.jar")
+        Files.createDirectories(dueTarget.parent)
+        Files.write(dueTarget, LIVE_BYTES)
+        val due = InstallerProperties(
+            minecraft = InstallerProperties.Minecraft(version = "1.21.11"),
+            mod = null,
+            update = InstallerProperties.Update(
+                app = app(
+                    version = "9.9.9",
+                    windowsSha = WINDOWS_SHA,
+                    macosSha = WINDOWS_SHA,
+                    linuxSha = WINDOWS_SHA,
+                ),
+            ),
+        )
+        val applied = runInstallerUpdate(
+            properties = due,
+            target = dueTarget,
+            fetch = { WINDOWS_BYTES.inputStream() },
+            spawn = { _, _, _ -> events.add("arm") },
+        )
+        assertTrue(applied)
+        assertEquals(listOf("arm"), events.toList())
+        assertTrue(LIVE_BYTES.contentEquals(Files.readAllBytes(dueTarget)))
+        assertFalse(
+            continueAfterInstallerUpdate(
+                updateApplied = true,
+                updateActive = false,
+                session = session,
+                finishedMismatch = true,
+            ),
+        )
+        assertFalse(
+            continueAfterInstallerUpdate(
+                updateApplied = false,
+                updateActive = true,
+                session = session,
+                finishedMismatch = true,
+            ),
+        )
+        assertEquals(0, runs)
+        assertEquals(SessionPhase.Confirm, session.state.value.phase)
+        val offline = runInstallerUpdate(
+            properties = due,
+            target = dueTarget,
+            fetch = { throw IOException("offline") },
+            spawn = { _, _, _ -> events.add("arm-skipped") },
+        )
+        assertFalse(offline)
+        assertFalse(events.contains("arm-skipped"))
+        assertTrue(
+            continueAfterInstallerUpdate(
+                updateApplied = false,
+                updateActive = false,
+                session = session,
+                finishedMismatch = true,
+            ),
+        )
+        assertTrue(entered.await(5, TimeUnit.SECONDS))
+        val deadline = System.nanoTime() + 5_000_000_000L
+        while (session.state.value.phase != SessionPhase.Finished && System.nanoTime() < deadline) {
+            Thread.sleep(10)
+        }
+        assertEquals(1, runs)
+        assertEquals(listOf("arm", "install"), events.toList())
+        val during = phaseDuringWork
+        assertEquals(SessionPhase.Working, during)
+        assertTrue(during != null && during.showsWorkingScreen())
+        assertEquals(SessionPhase.Finished, session.state.value.phase)
     }
 
     @Test

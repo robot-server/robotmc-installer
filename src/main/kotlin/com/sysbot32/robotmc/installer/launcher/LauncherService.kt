@@ -13,9 +13,11 @@ import com.sysbot32.robotmc.installer.prelaunch.installerLaunchCommand
 import io.github.oshai.kotlinlogging.KotlinLogging
 import org.springframework.stereotype.Service
 import java.nio.charset.StandardCharsets
+import java.nio.file.AtomicMoveNotSupportedException
 import java.nio.file.Files
 import java.nio.file.Path
 import java.nio.file.StandardCopyOption
+import java.security.MessageDigest
 import kotlin.io.path.exists
 
 private val log = KotlinLogging.logger { }
@@ -117,17 +119,67 @@ fun bundledApplicationYaml(): String {
  * 빌드가 넘긴 경로를 먼저 보고, 없으면 설치기 안의 리소스를 쓴다.
  */
 fun installPrelaunchAgent(home: Path): Path {
-    val destination = home.toAbsolutePath().normalize().resolve(AgentOptions.AGENT_JAR_NAME)
-    destination.parent?.let { Files.createDirectories(it) }
+    val directory = home.toAbsolutePath().normalize()
+    Files.createDirectories(directory)
+    val bytes = agentJarBytes()
+    val stable = directory.resolve(AgentOptions.AGENT_JAR_NAME)
+    if (!Files.exists(stable)) {
+        writeAgentJar(directory, stable, bytes)
+        return stable
+    }
+    if (sameFileBytes(stable, bytes)) {
+        return stable
+    }
+    // 게임이 이 JAR 을 연 채로 설치가 끝날 때까지 기다린다. Windows 는 그 파일을 지울 수 없다.
+    val versioned = directory.resolve(versionedAgentJarName(bytes))
+    if (!Files.isRegularFile(versioned) || !sameFileBytes(versioned, bytes)) {
+        writeAgentJar(directory, versioned, bytes)
+    }
+    return versioned
+}
+
+private fun agentJarBytes(): ByteArray {
     val property = System.getProperty("robotmc.prelaunch.agent")
-    if (!property.isNullOrBlank() && Files.isRegularFile(Path.of(property))) {
-        Files.copy(Path.of(property), destination, StandardCopyOption.REPLACE_EXISTING)
-        return destination
+    if (!property.isNullOrBlank()) {
+        val path = Path.of(property)
+        if (Files.isRegularFile(path)) {
+            return Files.readAllBytes(path)
+        }
     }
     val resource = LauncherService::class.java.classLoader.getResourceAsStream(AgentOptions.AGENT_JAR_NAME)
         ?: error("robotmc-prelaunch-agent.jar is missing")
-    resource.use { input ->
-        Files.copy(input, destination, StandardCopyOption.REPLACE_EXISTING)
+    return resource.use { it.readBytes() }
+}
+
+private fun versionedAgentJarName(bytes: ByteArray): String {
+    val digest = MessageDigest.getInstance("SHA-256").digest(bytes)
+    val hex = digest.joinToString(separator = "") { byte -> "%02x".format(byte) }.take(16)
+    return "robotmc-prelaunch-agent-$hex.jar"
+}
+
+private fun sameFileBytes(path: Path, bytes: ByteArray): Boolean {
+    if (!Files.isRegularFile(path) || Files.size(path) != bytes.size.toLong()) {
+        return false
     }
-    return destination
+    return Files.readAllBytes(path).contentEquals(bytes)
+}
+
+private fun writeAgentJar(directory: Path, destination: Path, bytes: ByteArray) {
+    val temporary = Files.createTempFile(directory, ".robotmc-prelaunch-agent-", ".tmp")
+    try {
+        Files.write(temporary, bytes)
+        try {
+            Files.move(
+                temporary,
+                destination,
+                StandardCopyOption.ATOMIC_MOVE,
+                StandardCopyOption.REPLACE_EXISTING,
+            )
+        } catch (_: AtomicMoveNotSupportedException) {
+            Files.move(temporary, destination, StandardCopyOption.REPLACE_EXISTING)
+        }
+    } catch (exception: Exception) {
+        Files.deleteIfExists(temporary)
+        throw exception
+    }
 }

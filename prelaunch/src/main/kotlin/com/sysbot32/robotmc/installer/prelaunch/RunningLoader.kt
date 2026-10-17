@@ -4,6 +4,30 @@ const val LAUNCHER_RESTART_DETAIL =
     "새로 설치한 내용이 아직 런처에 반영되지 않아 게임을 종료했어요.\n마인크래프트 런처를 완전히 종료한 뒤 다시 열고 플레이해 주세요."
 const val LAUNCHER_RESTART_ARGUMENT = "--installer.launcher-restart=true"
 
+/**
+ * 실행 전 검사가 끝났고 로더나 모드가 원격 구성과 다를 때 설치기 인자에 붙인다.
+ * 검사를 끝내지 못했거나 런처만 예전 로더인 경우에는 붙이지 않는다.
+ */
+const val FINISHED_MISMATCH_ARGUMENT = "--installer.finished-mismatch=true"
+
+/**
+ * 이번 플레이의 로더가 이미 원격 구성과 같을 때 붙인다.
+ * 설치기가 끝나면 그 프로세스가 게임을 이어서 시작한다.
+ */
+const val RESUME_GAME_ARGUMENT = "--installer.resume-game=true"
+
+/**
+ * 설치가 성공해서 이번 플레이의 게임을 이어서 시작할 때의 설치기 종료 코드.
+ * 0은 취소나 제거에도 쓰이므로 재개 신호로 쓰지 않는다.
+ */
+const val RESUME_GAME_CONTINUE_EXIT = 10
+
+/**
+ * 설치기 파일을 바꾼 뒤 새 프로세스로 넘길 때의 종료 코드.
+ * 게임을 이어서 시작하는 코드와 다르므로, 교체 직후 이번 플레이는 재개하지 않는다.
+ */
+const val RESUME_GAME_HANDOFF_EXIT = 20
+
 private val NEOFORGE_JAR = Regex("""^neoforge-(.+)\.jar$""", RegexOption.IGNORE_CASE)
 private val FABRIC_LOADER_JAR = Regex("""^fabric-loader-(.+)\.jar$""", RegexOption.IGNORE_CASE)
 
@@ -49,6 +73,25 @@ private fun argumentValue(arguments: List<String>, name: String): String? {
         }
     }
     return null
+}
+
+/**
+ * 이번 게임 JVM 의 로더가 [targetLoaderId] 와 같으면 true.
+ * 로더를 못 찾으면 false 다. 런처를 다시 구성하지 않아도 되는 경우만 골라 낸다.
+ */
+fun runningLoaderMatches(
+    runningLoaderIds: List<String>,
+    targetLoaderId: String?,
+    runningMinecraftVersion: String? = null,
+): Boolean {
+    if (targetLoaderId.isNullOrBlank() || runningLoaderIds.isEmpty()) {
+        return false
+    }
+    if (runningLoaderIds.none { sameLoader(it, targetLoaderId) }) {
+        return false
+    }
+    val targetMinecraft = minecraftVersionInFabricLoaderId(targetLoaderId) ?: return true
+    return runningMinecraftVersion == null || runningMinecraftVersion == targetMinecraft
 }
 
 /**

@@ -26,6 +26,22 @@ enum class SessionPhase {
     Finished,
 }
 
+/** 설치 창이 진행 화면으로 보여주는 단계. */
+fun SessionPhase.showsWorkingScreen(): Boolean = this == SessionPhase.Working
+
+/**
+ * 로더를 다시 구성하지 않는 자동 설치가 성공하면 창을 닫는다.
+ * 에이전트는 그 종료를 보고 이번 플레이의 게임을 이어서 시작한다.
+ */
+fun shouldCloseAfterUnattendedInstall(state: SessionState, resumeGame: Boolean): Boolean {
+    return resumeGame &&
+        state.mode == Mode.INSTALL &&
+        state.phase == SessionPhase.Finished &&
+        state.exitCode == 0 &&
+        !state.declined &&
+        !state.notice
+}
+
 data class SessionState(
     val phase: SessionPhase,
     val mode: Mode,
@@ -133,7 +149,26 @@ class InstallerSession(
     }
 
     fun accept() {
-        val started = synchronized(this.stateFlow) {
+        if (!this.enterWorking()) {
+            return
+        }
+        this.runInstalledWork()
+    }
+
+    /**
+     * 확인 단계에서 진행 화면으로 바꾼 뒤, 수락과 같은 설치 작업을 다른 스레드에서 한 번 실행한다.
+     * 이미 결정된 세션이면 아무것도 하지 않는다.
+     */
+    internal fun launchAcceptedWork(): Boolean {
+        if (!this.enterWorking()) {
+            return false
+        }
+        Thread(this::runInstalledWork, "robotmc-unattended-install").apply { isDaemon = true }.start()
+        return true
+    }
+
+    private fun enterWorking(): Boolean {
+        return synchronized(this.stateFlow) {
             val current = this.stateFlow.value
             if (current.phase != SessionPhase.Confirm || !this.decided.compareAndSet(false, true)) {
                 false
@@ -142,9 +177,9 @@ class InstallerSession(
                 true
             }
         }
-        if (!started) {
-            return
-        }
+    }
+
+    private fun runInstalledWork() {
         try {
             this.work()
             this.update {

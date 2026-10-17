@@ -46,6 +46,7 @@ import androidx.compose.ui.window.WindowState
 import androidx.compose.ui.window.rememberDialogState
 import androidx.compose.ui.window.rememberWindowState
 import com.sysbot32.robotmc.installer.config.InstallerProperties
+import com.sysbot32.robotmc.installer.prelaunch.RESUME_GAME_CONTINUE_EXIT
 import com.sysbot32.robotmc.installer.update.runInstallerUpdate
 import io.github.oshai.kotlinlogging.KotlinLogging
 import kotlinx.coroutines.Dispatchers
@@ -155,19 +156,25 @@ fun InstallerWindow(
     val icon = installerWindowIcon()
     Window(
         onCloseRequest = {
-            when (session.state.value.phase) {
-                SessionPhase.Confirm -> {
+            val phase = session.state.value.phase
+            when {
+                phase.showsWorkingScreen() -> Unit
+                phase == SessionPhase.Confirm -> {
                     session.decline()
                     onExit(session.state.value.exitCode ?: 0)
                 }
-                SessionPhase.Working -> Unit
-                SessionPhase.Finished -> onExit(session.state.value.exitCode ?: InstallerSession.GENERIC_FAILURE_EXIT)
+                else -> onExit(session.state.value.exitCode ?: InstallerSession.GENERIC_FAILURE_EXIT)
             }
         },
         title = windowTitle(state),
         state = windowState,
         icon = icon,
     ) {
+        LaunchedEffect(state.phase, state.exitCode, state.notice, state.declined) {
+            if (shouldCloseAfterUnattendedInstall(state, properties.resumeGame)) {
+                onExit(RESUME_GAME_CONTINUE_EXIT)
+            }
+        }
         LaunchedEffect(detailsOpen, updateNotice != null) {
             val height = windowHeight(detailsOpen, updateNotice != null, window)
             windowState.size = DpSize(520.dp, height)
@@ -341,8 +348,9 @@ private fun InstallerScreen(
                 style = MaterialTheme.typography.labelLarge,
                 color = MaterialTheme.colorScheme.primary,
             )
-            when (state.phase) {
-                SessionPhase.Confirm -> ConfirmPhase(
+            when {
+                state.phase.showsWorkingScreen() -> WorkingPhase(state, Modifier.weight(1f))
+                state.phase == SessionPhase.Confirm -> ConfirmPhase(
                     state = state,
                     properties = properties,
                     showPlan = showPlan,
@@ -357,8 +365,7 @@ private fun InstallerScreen(
                         scope.launch(Dispatchers.IO) { session.accept() }
                     },
                 )
-                SessionPhase.Working -> WorkingPhase(state, Modifier.weight(1f))
-                SessionPhase.Finished -> FinishedPhase(
+                else -> FinishedPhase(
                     state = state,
                     modifier = Modifier.weight(1f),
                     onClose = { onExit(state.exitCode ?: InstallerSession.GENERIC_FAILURE_EXIT) },
@@ -571,10 +578,10 @@ private fun moveInsideScreen(windowState: WindowState, window: AwtWindow) {
     }
 }
 
-private fun windowTitle(state: SessionState): String = when (state.phase) {
-    SessionPhase.Confirm -> InstallerSession.actionLabel(state.mode)
-    SessionPhase.Working -> InstallerSession.workingTitle(state.mode)
-    SessionPhase.Finished -> when {
+private fun windowTitle(state: SessionState): String = when {
+    state.phase.showsWorkingScreen() -> InstallerSession.workingTitle(state.mode)
+    state.phase == SessionPhase.Confirm -> InstallerSession.actionLabel(state.mode)
+    else -> when {
         state.declined -> "취소"
         state.notice -> "안내"
         (state.exitCode ?: 0) != 0 -> "오류"
